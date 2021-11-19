@@ -33,7 +33,3 @@ func NewClient(lggr logger.Logger, rpcUrl string, rpcHTTPURL *url.URL, sendonlyR
 	pool := NewPool(lggr, primaries, sendonlys, chainID)
 	return &client{logger: lggr, pool: pool}, nil
 }
-
-func PoolRunLoop(p *Pool) {
-	p.runLoop()
-}

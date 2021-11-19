@@ -94,7 +94,6 @@ func NewNode(lggr logger.Logger, wsuri url.URL, httpuri *url.URL, name string) N
 // Dialling an Alive node is noop
 // Can dial Dead or Undialled nodes
 // Cannot dial a closed node
-// TODO: Reconcile with Verify
 func (n *node) Dial(ctx context.Context) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -195,6 +194,8 @@ func (n *node) State() NodeState {
 // RPC wrappers
 
 // TODO: Handle state below
+// e.g. need a way to mark a node as "dead" if it fails more than 3 calls in a row
+// see: https://app.shortcut.com/chainlinklabs/story/8403/multiple-primary-geth-nodes-with-failover-load-balancer-part-2
 func (n *node) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
 	n.log.Debugw("eth.Client#Call(...)",
 		"method", method,

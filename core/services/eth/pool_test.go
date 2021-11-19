@@ -103,15 +103,15 @@ func TestPool_Dial(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), cltest.DefaultWaitTimeout)
 			defer cancel()
 
-			nodes := make([]Node, len(test.nodes))
+			nodes := make([]eth.Node, len(test.nodes))
 			for i, n := range test.nodes {
 				nodes[i] = n.newNode(t)
 			}
-			sendNodes := make([]SendOnlyNode, len(test.sendNodes))
+			sendNodes := make([]eth.SendOnlyNode, len(test.sendNodes))
 			for i, n := range test.sendNodes {
 				sendNodes[i] = n.newSendOnlyNode(t)
 			}
-			p := NewPool(logger.TestLogger(t), nodes, sendNodes, test.presetID)
+			p := eth.NewPool(logger.TestLogger(t), nodes, sendNodes, test.presetID)
 			if err := p.Dial(ctx); err != nil {
 				if test.expectErr {
 					if test.multiErrCnt > 0 {
@@ -188,15 +188,14 @@ func newPool(t *testing.T, nodes []eth.Node) *eth.Pool {
 func TestPool_Dial(t *testing.T) {
 	t.Run("starts and kicks off retry loop even if dial errors", func(t *testing.T) {
 		node := new(mocks.Node)
-		node.On("String").Return("n2")
+		node.On("String").Return("node")
 		node.On("Close").Maybe()
 		node.Test(t)
 		nodes := []eth.Node{node}
 		p := newPool(t, nodes)
 
 		node.On("Dial", mock.Anything).Return(errors.New("error"))
-		// TODO: Test verification error?
-		// node.On("Verify", mock.Anything, &cltest.FixtureChainID).Return(nil)
+		node.On("Verify", mock.Anything, &cltest.FixtureChainID).Return(nil)
 
 		err := p.Dial(context.Background())
 		require.NoError(t, err)
@@ -206,22 +205,44 @@ func TestPool_Dial(t *testing.T) {
 		node.AssertExpectations(t)
 	})
 
+	t.Run("starts and kicks off retry loop even on verification errors", func(t *testing.T) {
+		node := new(mocks.Node)
+		node.On("String").Return("node")
+		node.On("Close").Maybe()
+		node.Test(t)
+		nodes := []eth.Node{node}
+		p := newPool(t, nodes)
+
+		node.On("Dial", mock.Anything).Return(nil)
+		node.On("Verify", mock.Anything, &cltest.FixtureChainID).Return(errors.New("error"))
+
+		err := p.Dial(context.Background())
+		require.NoError(t, err)
+
+		p.Close()
+
+		node.AssertExpectations(t)
+	})
 }
 
 func TestPool_RunLoop(t *testing.T) {
-	t.Run("with several nodes and dial errors", func(t *testing.T) {
+	t.Run("with several nodes and different types of errors", func(t *testing.T) {
 		n1 := new(mocks.Node)
 		n1.Test(t)
 		n2 := new(mocks.Node)
 		n2.Test(t)
-		nodes := []eth.Node{n1, n2}
+		n3 := new(mocks.Node)
+		n3.Test(t)
+		nodes := []eth.Node{n1, n2, n3}
 		p := newPool(t, nodes)
 
 		n1.On("String").Maybe().Return("n1")
 		n2.On("String").Maybe().Return("n2")
+		n3.On("String").Maybe().Return("n3")
 
 		n1.On("Close").Maybe()
 		n2.On("Close").Maybe()
+		n3.On("Close").Maybe()
 
 		wait := make(chan struct{})
 		// n1 succeeds
@@ -230,11 +251,18 @@ func TestPool_RunLoop(t *testing.T) {
 		// n2 fails once then succeeds in runloop
 		n2.On("Dial", mock.Anything).Return(errors.New("first error")).Once()
 		n2.On("State").Return(eth.NodeStateDead)
-		n2.On("Dial", mock.Anything).Once().Return(nil).Run(func(_ mock.Arguments) {
+		n2.On("Dial", mock.Anything).Once()
+		// n3 succeeds dial then fails verification
+		n3.On("Dial", mock.Anything).Return(nil).Once()
+		n3.On("State").Return(eth.NodeStateDialed)
+		n3.On("Verify", mock.Anything).Return(errors.New("Verify error")).Once()
+		n3.On("Verify", mock.Anything).Return(nil).Once().Return(nil).Run(func(_ mock.Arguments) {
 			close(wait)
 		})
+
 		// Handle spurious extra calls after
 		n2.On("Dial", mock.Anything).Maybe()
+		n3.On("Verify", mock.Anything).Maybe()
 
 		require.NoError(t, p.Dial(context.Background()))
 

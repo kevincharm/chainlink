@@ -24,3 +24,7 @@ func Test_NodeWrapError(t *testing.T) {
 		assert.EqualError(t, err, "foo call failed: remote eth node timed out: context deadline exceeded")
 	})
 }
+
+func Test_NodeStateTransitions(t *testing.T) {
+	t.Fatal("TODO")
+}
