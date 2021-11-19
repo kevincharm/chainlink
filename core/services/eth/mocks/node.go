@@ -8,6 +8,11 @@ import (
 
 	common "github.com/ethereum/go-ethereum/common"
 
+<<<<<<< HEAD
+=======
+	eth "github.com/smartcontractkit/chainlink/core/services/eth"
+
+>>>>>>> 16d632089 (Do not exit on start if eth node is unreachable)
 	ethereum "github.com/ethereum/go-ethereum"
 
 	mock "github.com/stretchr/testify/mock"
@@ -122,6 +127,7 @@ func (_m *Node) CallContract(ctx context.Context, msg ethereum.CallMsg, blockNum
 	return r0, r1
 }
 
+<<<<<<< HEAD
 // ChainID provides a mock function with given fields: ctx
 func (_m *Node) ChainID(ctx context.Context) (*big.Int, error) {
 	ret := _m.Called(ctx)
@@ -145,6 +151,8 @@ func (_m *Node) ChainID(ctx context.Context) (*big.Int, error) {
 	return r0, r1
 }
 
+=======
+>>>>>>> 16d632089 (Do not exit on start if eth node is unreachable)
 // Close provides a mock function with given fields:
 func (_m *Node) Close() {
 	_m.Called()
@@ -359,6 +367,23 @@ func (_m *Node) SendTransaction(ctx context.Context, tx *types.Transaction) erro
 	return r0
 }
 
+<<<<<<< HEAD
+=======
+// State provides a mock function with given fields:
+func (_m *Node) State() eth.NodeState {
+	ret := _m.Called()
+
+	var r0 eth.NodeState
+	if rf, ok := ret.Get(0).(func() eth.NodeState); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(eth.NodeState)
+	}
+
+	return r0
+}
+
+>>>>>>> 16d632089 (Do not exit on start if eth node is unreachable)
 // String provides a mock function with given fields:
 func (_m *Node) String() string {
 	ret := _m.Called()

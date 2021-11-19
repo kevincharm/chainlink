@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"time"
 
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -15,16 +16,21 @@ import (
 	"go.uber.org/multierr"
 
 	"github.com/smartcontractkit/chainlink/core/logger"
+	"github.com/smartcontractkit/chainlink/core/utils"
 )
 
 // Pool represents an abstraction over one or more primary nodes
 // It is responsible for liveness checking and balancing queries across live nodes
 type Pool struct {
+	utils.StartStopOnce
 	nodes           []Node
 	sendonlys       []SendOnlyNode
 	chainID         *big.Int
 	roundRobinCount atomic.Uint32
 	logger          logger.Logger
+
+	chStop chan struct{}
+	wg     sync.WaitGroup
 }
 
 func NewPool(logger logger.Logger, nodes []Node, sendonlys []SendOnlyNode, chainID *big.Int) *Pool {
@@ -32,9 +38,14 @@ func NewPool(logger logger.Logger, nodes []Node, sendonlys []SendOnlyNode, chain
 		panic("must provide at least one node")
 	}
 	p := &Pool{
-		nodes:     nodes,
-		sendonlys: sendonlys,
-		logger:    logger.Named("Pool"),
+		utils.StartStopOnce{},
+		nodes,
+		sendonlys,
+		chainID,
+		atomic.Uint32{},
+		logger.Named("Pool"),
+		make(chan struct{}),
+		sync.WaitGroup{},
 	}
 	if chainID != nil {
 		p.initChainID(chainID)
@@ -61,6 +72,31 @@ func (p *Pool) Dial(ctx context.Context) (err error) {
 	return p.verifyChainIDs(ctx)
 }
 
+func (p *Pool) Dial(ctx context.Context) error {
+	return p.StartOnce("Pool", func() (merr error) {
+		for _, n := range p.nodes {
+			if err := n.Dial(ctx); err != nil {
+				p.logger.Errorw("Error dialling node", "node", n, "err", err)
+			}
+		}
+		for _, s := range p.sendonlys {
+			// TODO: Deal with sendonly nodes state
+			err := s.Dial(ctx)
+			if err != nil {
+				return err
+			}
+		}
+		// if err := p.verifyChainIDs(ctx); err != nil {
+		//     return err
+		// }
+		p.wg.Add(1)
+		go p.runLoop()
+
+		return nil
+	})
+}
+
+// TODO: Need to move this to check after/in dial
 // verifyChainIDs checks that every node's chain ID is consistent, initializing from the first node if nil.
 func (p *Pool) verifyChainIDs(ctx context.Context) (err error) {
 	if p.chainID == nil {
@@ -79,10 +115,49 @@ func (p *Pool) verifyChainIDs(ctx context.Context) (err error) {
 	return err
 }
 
-func (p *Pool) Close() {
-	for _, n := range p.nodes {
-		n.Close()
+var DialRetryInterval = 5 * time.Second
+
+func (p *Pool) runLoop() {
+	defer p.wg.Done()
+	ticker := time.NewTicker(DialRetryInterval)
+
+	for {
+		select {
+		case <-p.chStop:
+			return
+		case <-ticker.C:
+			// re-dial all dead nodes
+			func() {
+				ctx, cancel := utils.ContextFromChan(p.chStop)
+				defer cancel()
+				ctx, cancel = context.WithTimeout(ctx, DialRetryInterval)
+				defer cancel()
+				// TODO: How does this play with automatic WS reconnects?
+				p.redialDeadNodes(ctx)
+			}()
+		}
 	}
+}
+
+func (p *Pool) redialDeadNodes(ctx context.Context) {
+	for _, n := range p.nodes {
+		if n.State() == NodeStateDead {
+			if err := n.Dial(ctx); err != nil {
+				p.logger.Errorw(fmt.Sprintf("Failed to dial eth node: %v", err), "err", err)
+			}
+		}
+	}
+}
+
+func (p *Pool) Close() {
+	p.StopOnce("Pool", func() error {
+		close(p.chStop)
+		p.wg.Wait()
+		for _, n := range p.nodes {
+			n.Close()
+		}
+		return nil
+	})
 }
 
 func (p *Pool) ChainID() *big.Int {
@@ -90,16 +165,26 @@ func (p *Pool) ChainID() *big.Int {
 }
 
 func (p *Pool) getRoundRobin() Node {
-	nNodes := len(p.nodes)
+	nodes := p.liveNodes()
+	nNodes := len(nodes)
 	if nNodes == 0 {
-		return &erroringNode{errMsg: fmt.Sprintf("no nodes available for chain %s", p.chainID.String())}
+		return &erroringNode{errMsg: fmt.Sprintf("no live nodes available for chain %s", p.chainID.String())}
 	}
 
 	// NOTE: Inc returns the number after addition, so we must -1 to get the "current" counter
 	count := p.roundRobinCount.Inc() - 1
 	idx := int(count % uint32(nNodes))
 
-	return p.nodes[idx]
+	return nodes[idx]
+}
+
+func (p *Pool) liveNodes() (liveNodes []Node) {
+	for _, n := range p.nodes {
+		if n.State() == NodeStateAlive {
+			liveNodes = append(liveNodes, n)
+		}
+	}
+	return
 }
 
 func (p *Pool) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {

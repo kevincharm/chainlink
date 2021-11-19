@@ -7,18 +7,26 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 	"go.uber.org/multierr"
 
 	"github.com/smartcontractkit/chainlink/core/internal/cltest"
 	"github.com/smartcontractkit/chainlink/core/logger"
-	. "github.com/smartcontractkit/chainlink/core/services/eth"
+	"github.com/smartcontractkit/chainlink/core/services/eth"
+	"github.com/smartcontractkit/chainlink/core/services/eth/mocks"
 )
+
+func init() {
+	eth.DialRetryInterval = 100 * time.Millisecond
+}
 
 func TestPool_Dial(t *testing.T) {
 	tests := []struct {
@@ -171,4 +179,74 @@ func (x *chainIDService) ChainId(ctx context.Context) (*hexutil.Big, error) {
 		return nil, x.err
 	}
 	return (*hexutil.Big)(big.NewInt(x.chainID)), nil
+}
+
+func newPool(t *testing.T, nodes []eth.Node) *eth.Pool {
+	return eth.NewPool(logger.TestLogger(t), nodes, []eth.SendOnlyNode{}, &cltest.FixtureChainID)
+}
+
+func TestPool_Dial(t *testing.T) {
+	t.Run("starts and kicks off retry loop even if dial errors", func(t *testing.T) {
+		node := new(mocks.Node)
+		node.On("String").Return("n2")
+		node.On("Close").Maybe()
+		node.Test(t)
+		nodes := []eth.Node{node}
+		p := newPool(t, nodes)
+
+		node.On("Dial", mock.Anything).Return(errors.New("error"))
+		// TODO: Test verification error?
+		// node.On("Verify", mock.Anything, &cltest.FixtureChainID).Return(nil)
+
+		err := p.Dial(context.Background())
+		require.NoError(t, err)
+
+		p.Close()
+
+		node.AssertExpectations(t)
+	})
+
+}
+
+func TestPool_RunLoop(t *testing.T) {
+	t.Run("with several nodes and dial errors", func(t *testing.T) {
+		n1 := new(mocks.Node)
+		n1.Test(t)
+		n2 := new(mocks.Node)
+		n2.Test(t)
+		nodes := []eth.Node{n1, n2}
+		p := newPool(t, nodes)
+
+		n1.On("String").Maybe().Return("n1")
+		n2.On("String").Maybe().Return("n2")
+
+		n1.On("Close").Maybe()
+		n2.On("Close").Maybe()
+
+		wait := make(chan struct{})
+		// n1 succeeds
+		n1.On("Dial", mock.Anything).Return(nil).Once()
+		n1.On("State").Return(eth.NodeStateAlive)
+		// n2 fails once then succeeds in runloop
+		n2.On("Dial", mock.Anything).Return(errors.New("first error")).Once()
+		n2.On("State").Return(eth.NodeStateDead)
+		n2.On("Dial", mock.Anything).Once().Return(nil).Run(func(_ mock.Arguments) {
+			close(wait)
+		})
+		// Handle spurious extra calls after
+		n2.On("Dial", mock.Anything).Maybe()
+
+		require.NoError(t, p.Dial(context.Background()))
+
+		select {
+		case <-wait:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for Dial call")
+		}
+		p.Close()
+
+		n1.AssertExpectations(t)
+		n2.AssertExpectations(t)
+	})
+
 }

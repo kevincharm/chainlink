@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"net/url"
+	"sync"
 
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -17,11 +18,12 @@ import (
 )
 
 //go:generate mockery --name Node --output ./mocks/ --case=underscore
-
 type Node interface {
 	Dial(ctx context.Context) error
 	Close()
 	Verify(ctx context.Context, expectedChainID *big.Int) (err error)
+
+	State() NodeState
 
 	CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error
 	BatchCallContext(ctx context.Context, b []rpc.BatchElem) error
@@ -52,14 +54,26 @@ type rawclient struct {
 	uri  url.URL
 }
 
+type NodeState int
+
+const (
+	NodeStateUndialed = NodeState(iota)
+	NodeStateDead
+	NodeStateAlive
+	NodeStateClosed
+)
+
 // Node represents one ethereum node.
 // It must have a ws url and may have a http url
 type node struct {
-	ws     rawclient
-	http   *rawclient
-	log    logger.Logger
-	name   string
-	dialed bool
+	ws   rawclient
+	http *rawclient
+	log  logger.Logger
+	name string
+
+	state  NodeState
+	mu     sync.RWMutex
+	closed bool
 }
 
 func NewNode(lggr logger.Logger, wsuri url.URL, httpuri *url.URL, name string) Node {
@@ -75,9 +89,17 @@ func NewNode(lggr logger.Logger, wsuri url.URL, httpuri *url.URL, name string) N
 	return n
 }
 
+// Dialling an Alive node is noop
+// Can dial Dead or Undialled nodes
+// Cannot dial a closed node
+// TODO: Reconcile with Verify
 func (n *node) Dial(ctx context.Context) error {
-	if n.dialed {
-		panic("eth.Client.Dial(...) should only be called once during the node's lifetime.")
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.state == NodeStateAlive {
+		return nil
+	} else if n.state == NodeStateClosed {
+		return errors.New("cannot dial closed node")
 	}
 
 	{
@@ -88,32 +110,44 @@ func (n *node) Dial(ctx context.Context) error {
 		n.log.Debugw("eth.Client#Dial(...)", "wsuri", n.ws.uri.String(), "httpuri", httpuri)
 	}
 
-	{
-		uri := n.ws.uri.String()
-		rpc, err := rpc.DialWebsocket(ctx, uri, "")
-		if err != nil {
-			return errors.Wrapf(err, "Error while dialing websocket: %v", uri)
-		}
-		n.dialed = true
-		n.ws.rpc = rpc
-		n.ws.geth = ethclient.NewClient(rpc)
+	uri := n.ws.uri.String()
+	wsrpc, err := rpc.DialWebsocket(ctx, uri, "")
+	if err != nil {
+		n.state = NodeStateDead
+		return errors.Wrapf(err, "Error while dialing websocket: %v", uri)
 	}
 
+	var httprpc *rpc.Client
 	if n.http != nil {
 		uri := n.http.uri.String()
-		rpc, err := rpc.DialHTTP(uri)
+		httprpc, err = rpc.DialHTTP(uri)
 		if err != nil {
+			n.state = NodeStateDead
 			return errors.Wrapf(err, "Error while dialing HTTP: %v", uri)
 		}
-		n.http.rpc = rpc
-		n.http.geth = ethclient.NewClient(rpc)
+	}
+
+	n.state = NodeStateAlive
+	n.ws.rpc = wsrpc
+	n.ws.geth = ethclient.NewClient(wsrpc)
+
+	if n.http != nil {
+		n.http.rpc = httprpc
+		n.http.geth = ethclient.NewClient(httprpc)
 	}
 
 	return nil
 }
 
+func (n *node) State() NodeState {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.state
+}
+
 // RPC wrappers
 
+// TODO: Handle state below
 func (n node) CallContext(ctx context.Context, result interface{}, method string, args ...interface{}) error {
 	n.log.Debugw("eth.Client#Call(...)",
 		"method", method,
@@ -143,7 +177,12 @@ func (n node) EthSubscribe(ctx context.Context, channel interface{}, args ...int
 }
 
 func (n node) Close() {
-	n.ws.rpc.Close()
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.state = NodeStateClosed
+	if n.ws.rpc != nil {
+		n.ws.rpc.Close()
+	}
 }
 
 // GethClient wrappers
