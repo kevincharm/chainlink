@@ -141,7 +141,9 @@ func (cli *Client) RunNode(c *clipkg.Context) error {
 	}
 	defer func() {
 		lggr.ErrorIf(app.Stop(), "Error stopping app")
-		lggr.Sync()
+		if err := lggr.Sync(); err != nil {
+			panic(err)
+		}
 	}()
 	err = logConfigVariables(lggr, cli.Config)
 	if err != nil {

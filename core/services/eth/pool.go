@@ -116,7 +116,9 @@ func (p *Pool) redialDeadNodes(ctx context.Context) {
 }
 
 func (p *Pool) Close() {
-	p.StopOnce("Pool", func() error {
+	// have to handle err here to avoid linter even though it will always be
+	// nil
+	err := p.StopOnce("Pool", func() error {
 		close(p.chStop)
 		p.wg.Wait()
 		for _, n := range p.nodes {
@@ -124,6 +126,9 @@ func (p *Pool) Close() {
 		}
 		return nil
 	})
+	if err != nil {
+		panic("invariant violated")
+	}
 }
 
 func (p *Pool) ChainID() *big.Int {

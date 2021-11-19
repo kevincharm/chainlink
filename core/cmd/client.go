@@ -286,7 +286,9 @@ type ChainlinkRunner struct{}
 // for input and return data.
 func (n ChainlinkRunner) Run(app chainlink.Application) error {
 	defer func() {
-		app.GetLogger().Sync()
+		if err := app.GetLogger().Sync(); err != nil {
+			panic(err)
+		}
 	}()
 	config := app.GetConfig()
 	mode := gin.ReleaseMode
