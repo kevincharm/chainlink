@@ -11,9 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/pkg/errors"
 	"go.uber.org/atomic"
-	"go.uber.org/multierr"
 
 	"github.com/smartcontractkit/chainlink/core/logger"
 	"github.com/smartcontractkit/chainlink/core/utils"
@@ -37,46 +35,30 @@ func NewPool(logger logger.Logger, nodes []Node, sendonlys []SendOnlyNode, chain
 	if len(nodes) == 0 {
 		panic("must provide at least one node")
 	}
+	if chainID == nil {
+		panic("chainID is required")
+	}
 	p := &Pool{
 		utils.StartStopOnce{},
 		nodes,
 		sendonlys,
 		chainID,
 		atomic.Uint32{},
-		logger.Named("Pool"),
+		logger.Named("Pool").With("evmChainID", chainID.String()),
 		make(chan struct{}),
 		sync.WaitGroup{},
-	}
-	if chainID != nil {
-		p.initChainID(chainID)
 	}
 	return p
 }
 
-func (p *Pool) initChainID(chainID *big.Int) {
-	p.chainID = chainID
-	p.logger = p.logger.With("evmChainID", chainID.String())
-}
-
 // Dial dials every node in the pool and verifies their chain IDs are consistent.
-func (p *Pool) Dial(ctx context.Context) (err error) {
-	for _, n := range p.nodes {
-		err = multierr.Combine(err, n.Dial(ctx))
-	}
-	for _, s := range p.sendonlys {
-		err = multierr.Combine(err, s.Dial(ctx))
-	}
-	if err != nil {
-		return err
-	}
-	return p.verifyChainIDs(ctx)
-}
-
 func (p *Pool) Dial(ctx context.Context) error {
 	return p.StartOnce("Pool", func() (merr error) {
 		for _, n := range p.nodes {
 			if err := n.Dial(ctx); err != nil {
-				p.logger.Errorw("Error dialling node", "node", n, "err", err)
+				p.logger.Errorw("Error dialing node", "node", n, "err", err)
+			} else if err := n.Verify(ctx, p.chainID); err != nil {
+				p.logger.Errorw("Error verifying node", "node", n, "err", err)
 			}
 		}
 		for _, s := range p.sendonlys {
@@ -86,9 +68,6 @@ func (p *Pool) Dial(ctx context.Context) error {
 				return err
 			}
 		}
-		// if err := p.verifyChainIDs(ctx); err != nil {
-		//     return err
-		// }
 		p.wg.Add(1)
 		go p.runLoop()
 
@@ -96,25 +75,7 @@ func (p *Pool) Dial(ctx context.Context) error {
 	})
 }
 
-// TODO: Need to move this to check after/in dial
-// verifyChainIDs checks that every node's chain ID is consistent, initializing from the first node if nil.
-func (p *Pool) verifyChainIDs(ctx context.Context) (err error) {
-	if p.chainID == nil {
-		chainID, err2 := p.nodes[0].ChainID(ctx)
-		if err2 != nil {
-			return errors.Wrap(err, "failed to get chain ID from first node")
-		}
-		p.initChainID(chainID)
-	}
-	for _, n := range p.nodes {
-		err = multierr.Combine(err, n.Verify(ctx, p.chainID))
-	}
-	for _, s := range p.sendonlys {
-		err = multierr.Combine(err, s.Verify(ctx, p.chainID))
-	}
-	return err
-}
-
+// DialRetryInterval controls how often we try to reconnect a dead node
 var DialRetryInterval = 5 * time.Second
 
 func (p *Pool) runLoop() {
@@ -143,7 +104,12 @@ func (p *Pool) redialDeadNodes(ctx context.Context) {
 	for _, n := range p.nodes {
 		if n.State() == NodeStateDead {
 			if err := n.Dial(ctx); err != nil {
-				p.logger.Errorw(fmt.Sprintf("Failed to dial eth node: %v", err), "err", err)
+				p.logger.Errorw(fmt.Sprintf("Failed to redial eth node: %v", err), "err", err)
+			}
+		}
+		if n.State() == NodeStateInvalidChainID {
+			if err := n.Verify(ctx, p.chainID); err != nil {
+				p.logger.Errorw(fmt.Sprintf("Failed to verify eth node: %v", err), "err", err)
 			}
 		}
 	}

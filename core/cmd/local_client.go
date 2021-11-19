@@ -136,12 +136,9 @@ func (cli *Client) RunNode(c *clipkg.Context) error {
 	}
 
 	lggr.Info("API exposed for user ", user.Email)
-	fmt.Println("BALLS before Start")
 	if e := app.Start(); e != nil {
-		fmt.Println("BALLS start error")
 		return cli.errorOut(fmt.Errorf("error starting app: %+v", e))
 	}
-	fmt.Println("BALLS after Start")
 	defer func() {
 		lggr.ErrorIf(app.Stop(), "Error stopping app")
 		lggr.Sync()
