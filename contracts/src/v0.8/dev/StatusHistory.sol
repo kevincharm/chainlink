@@ -1,0 +1,227 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import {AddressAliasHelper} from "./vendor/arb-bridge-eth/v0.8.0-custom/contracts/libraries/AddressAliasHelper.sol";
+import {ForwarderInterface} from "./interfaces/ForwarderInterface.sol";
+import {AggregatorInterface} from "../interfaces/AggregatorInterface.sol";
+import {AggregatorV3Interface} from "../interfaces/AggregatorV3Interface.sol";
+import {AggregatorV2V3Interface} from "../interfaces/AggregatorV2V3Interface.sol";
+import {FlagsInterface} from "./interfaces/FlagsInterface.sol";
+import {StatusHistoryInterface} from "./interfaces/StatusHistoryInterface.sol";
+import {ConfirmedOwner} from "../ConfirmedOwner.sol";
+
+/**
+ * @title StatusHistory - L2 status history aggregator
+ * @notice L2 contract that receives status updates from a specific L1 address,
+ *  records a new answer if the status changed, and raises or lowers the flag on the
+ *   stored Flags contract.
+ */
+contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, ConfirmedOwner {
+  struct Round {
+    bool status;
+    uint64 timestamp;
+  }
+
+  string private constant V3_NO_DATA_ERROR = "No data present";
+  /// @dev Follows: https://eips.ethereum.org/EIPS/eip-1967
+  address public constant FLAG_ARBITRUM_SEQ_OFFLINE =
+    address(bytes20(bytes32(uint256(keccak256("chainlink.flags.arbitrum-seq-offline")) - 1)));
+
+  uint8 public constant override decimals = 0;
+  string public constant override description = "L2 Status History";
+  uint256 public constant override version = 1;
+
+  /// @dev Flags contract to raise/lower flags on, during status transitions
+  FlagsInterface public immutable flags;
+  /// @dev L1 address
+  address private s_l1Owner;
+  /// @dev Contract initialization flag
+  bool public initialized = false;
+
+  uint80 private latestRoundId = 0;
+  mapping(uint80 => Round) private rounds;
+
+  event L1OwnershipTransferred(address indexed from, address indexed to);
+  event Initialized();
+
+  constructor(address flagsAddress, address l1OwnerAddress) ConfirmedOwner(msg.sender) {
+    setL1Owner(l1OwnerAddress);
+
+    flags = FlagsInterface(flagsAddress);
+  }
+
+  /**
+   * @notice Initialise the first round. Can't be done in the constructor,
+   *    because this contract's address must be set as the controller in
+   *    the Flags contract.
+   */
+  function initialize() external onlyOwner {
+    require(!initialized, "Already initialised");
+
+    uint64 timestamp = uint64(block.timestamp);
+    bool currentStatus = flags.getFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
+    Round memory initialRound = Round(currentStatus, timestamp);
+    rounds[0] = initialRound;
+
+    initialized = true;
+    emit Initialized();
+    emit NewRound(0, msg.sender, timestamp);
+    emit AnswerUpdated(getStatusAnswer(initialRound.status), 0, timestamp);
+  }
+
+  /// @return L1 owner address
+  function l1Owner() public view virtual returns (address) {
+    return s_l1Owner;
+  }
+
+  /**
+   * @notice transfer ownership of this account to a new L1 owner
+   * @dev Forwarding can be disabled by setting the L1 owner as `address(0)`. Accessible only by owner.
+   * @param to new L1 owner that will be allowed to call the forward fn
+   */
+  function transferL1Ownership(address to) external virtual onlyOwner {
+    setL1Owner(to);
+  }
+
+  /// @notice internal method that stores the L1 owner
+  function setL1Owner(address to) internal {
+    address from = s_l1Owner;
+    if (from != to) {
+      s_l1Owner = to;
+      emit L1OwnershipTransferred(from, to);
+    }
+  }
+
+  /**
+   * @dev Returns an AggregatorV2V3Interface compatible answer from status flag
+   */
+  function getStatusAnswer(bool stat) internal pure returns (int256) {
+    return stat ? int256(1) : int256(0);
+  }
+
+  /**
+   * @notice The L2 xDomain `msg.sender`, generated from L1 sender address
+   */
+  function crossDomainMessenger() public view returns (address) {
+    return AddressAliasHelper.applyL1ToL2Alias(l1Owner());
+  }
+
+  /**
+   * @notice Raise or lower the flag on the stored Flags contract.
+   */
+  function forwardStatusToFlags(bool status) internal {
+    if (status) {
+      flags.raiseFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
+    } else {
+      flags.lowerFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
+    }
+  }
+
+  /**
+   * @notice Record a new status and timestamp if it has changed since the last round.
+   */
+  function statusUpdated(bool status, uint64 timestamp) external override {
+    require(msg.sender == crossDomainMessenger(), "Sender is not the L2 messenger");
+
+    uint80 latestRoundId_ = latestRoundId;
+
+    // Ignore if status did not change
+    if (status == rounds[latestRoundId].status) {
+      return;
+    }
+
+    // Prepare & load a new round with updated status
+    Round memory nextRound = Round(status, timestamp);
+    latestRoundId_ += 1;
+    rounds[latestRoundId_] = nextRound;
+    latestRoundId = latestRoundId_;
+
+    emit NewRound(latestRoundId_, msg.sender, timestamp);
+    emit AnswerUpdated(getStatusAnswer(nextRound.status), latestRoundId_, timestamp);
+
+    forwardStatusToFlags(status);
+  }
+
+  /// @inheritdoc AggregatorInterface
+  function latestAnswer() external view override returns (int256) {
+    uint80 latestRoundId_ = latestRoundId;
+    if (latestRoundId_ > 0) {
+      return getStatusAnswer(rounds[latestRoundId].status);
+    }
+
+    return 0;
+  }
+
+  /// @inheritdoc AggregatorInterface
+  function latestTimestamp() external view override returns (uint256) {
+    uint80 latestRoundId_ = latestRoundId;
+    if (latestRoundId_ > 0) {
+      return rounds[latestRoundId].timestamp;
+    }
+
+    return 0;
+  }
+
+  /// @inheritdoc AggregatorInterface
+  function latestRound() external view override returns (uint256) {
+    return latestRoundId;
+  }
+
+  /// @inheritdoc AggregatorInterface
+  function getAnswer(uint256 roundId) external view override returns (int256) {
+    if (roundId <= type(uint80).max && roundId > 0 && latestRoundId >= roundId) {
+      return getStatusAnswer(rounds[uint80(roundId)].status);
+    }
+
+    return 0;
+  }
+
+  /// @inheritdoc AggregatorInterface
+  function getTimestamp(uint256 roundId) external view override returns (uint256) {
+    if (roundId <= type(uint80).max && roundId > 0 && latestRoundId >= roundId) {
+      return rounds[uint80(roundId)].timestamp;
+    }
+
+    return 0;
+  }
+
+  /// @inheritdoc AggregatorV3Interface
+  function getRoundData(uint80 _roundId)
+    public
+    view
+    override
+    returns (
+      uint80 roundId,
+      int256 answer,
+      uint256 startedAt,
+      uint256 updatedAt,
+      uint80 answeredInRound
+    )
+  {
+    uint80 latestRoundId_ = latestRoundId;
+    require(latestRoundId_ > 0 && latestRoundId_ >= _roundId, "No data present");
+
+    Round memory r = rounds[_roundId];
+    roundId = _roundId;
+    answer = r.status ? int256(1) : int256(0);
+    startedAt = uint256(r.timestamp);
+    updatedAt = startedAt;
+    answeredInRound = _roundId;
+  }
+
+  /// @inheritdoc AggregatorV3Interface
+  function latestRoundData()
+    external
+    view
+    override
+    returns (
+      uint80 roundId,
+      int256 answer,
+      uint256 startedAt,
+      uint256 updatedAt,
+      uint80 answeredInRound
+    )
+  {
+    return getRoundData(latestRoundId);
+  }
+}
