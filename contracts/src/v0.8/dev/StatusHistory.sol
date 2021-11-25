@@ -36,10 +36,10 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
   /// @dev L1 address
   address private s_l1Owner;
   /// @dev Contract initialization flag
-  bool public initialized = false;
+  bool public s_initialized = false;
 
-  uint80 private latestRoundId = 0;
-  mapping(uint80 => Round) private rounds;
+  uint80 private s_latestRoundId = 0;
+  mapping(uint80 => Round) private s_rounds;
 
   event L1OwnershipTransferred(address indexed from, address indexed to);
   event Initialized();
@@ -56,14 +56,14 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
    *    the Flags contract.
    */
   function initialize() external onlyOwner {
-    require(!initialized, "Already initialised");
+    require(!s_initialized, "Already initialised");
 
     uint64 timestamp = uint64(block.timestamp);
     bool currentStatus = flags.getFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
     Round memory initialRound = Round(currentStatus, timestamp);
-    rounds[0] = initialRound;
+    s_rounds[0] = initialRound;
 
-    initialized = true;
+    s_initialized = true;
     emit Initialized();
     emit NewRound(0, msg.sender, timestamp);
     emit AnswerUpdated(getStatusAnswer(initialRound.status), 0, timestamp);
@@ -121,32 +121,32 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
    * @notice Record a new status and timestamp if it has changed since the last round.
    */
   function statusUpdated(bool status, uint64 timestamp) external override {
-    require(initialized, "StatusHistory has not been initialized");
+    require(s_initialized, "StatusHistory has not been initialized");
     require(msg.sender == crossDomainMessenger(), "Sender is not the L2 messenger");
 
-    uint80 latestRoundId_ = latestRoundId;
+    uint80 latestRoundId = s_latestRoundId;
 
     // Ignore if status did not change
-    if (status == rounds[latestRoundId].status) {
+    if (status == s_rounds[latestRoundId].status) {
       return;
     }
 
     // Prepare & load a new round with updated status
     Round memory nextRound = Round(status, timestamp);
-    latestRoundId_ += 1;
-    rounds[latestRoundId_] = nextRound;
-    latestRoundId = latestRoundId_;
+    latestRoundId += 1;
+    s_rounds[latestRoundId] = nextRound;
+    s_latestRoundId = latestRoundId;
 
-    emit NewRound(latestRoundId_, msg.sender, timestamp);
-    emit AnswerUpdated(getStatusAnswer(nextRound.status), latestRoundId_, timestamp);
+    emit NewRound(latestRoundId, msg.sender, timestamp);
+    emit AnswerUpdated(getStatusAnswer(nextRound.status), latestRoundId, timestamp);
 
     forwardStatusToFlags(status);
   }
 
   /// @inheritdoc AggregatorInterface
   function latestAnswer() external view override returns (int256) {
-    if (initialized) {
-      return getStatusAnswer(rounds[latestRoundId].status);
+    if (s_initialized) {
+      return getStatusAnswer(s_rounds[s_latestRoundId].status);
     }
 
     return 0;
@@ -154,8 +154,8 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
 
   /// @inheritdoc AggregatorInterface
   function latestTimestamp() external view override returns (uint256) {
-    if (initialized) {
-      return rounds[latestRoundId].timestamp;
+    if (s_initialized) {
+      return s_rounds[s_latestRoundId].timestamp;
     }
 
     return 0;
@@ -163,13 +163,13 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
 
   /// @inheritdoc AggregatorInterface
   function latestRound() external view override returns (uint256) {
-    return latestRoundId;
+    return s_latestRoundId;
   }
 
   /// @inheritdoc AggregatorInterface
   function getAnswer(uint256 roundId) external view override returns (int256) {
-    if (initialized && roundId <= type(uint80).max && latestRoundId >= roundId) {
-      return getStatusAnswer(rounds[uint80(roundId)].status);
+    if (s_initialized && roundId <= type(uint80).max && s_latestRoundId >= roundId) {
+      return getStatusAnswer(s_rounds[uint80(roundId)].status);
     }
 
     return 0;
@@ -177,8 +177,8 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
 
   /// @inheritdoc AggregatorInterface
   function getTimestamp(uint256 roundId) external view override returns (uint256) {
-    if (initialized && roundId <= type(uint80).max && latestRoundId >= roundId) {
-      return rounds[uint80(roundId)].timestamp;
+    if (s_initialized && roundId <= type(uint80).max && s_latestRoundId >= roundId) {
+      return s_rounds[uint80(roundId)].timestamp;
     }
 
     return 0;
@@ -197,9 +197,9 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
       uint80 answeredInRound
     )
   {
-    require(initialized && latestRoundId >= _roundId, "No data present");
+    require(s_initialized && s_latestRoundId >= _roundId, "No data present");
 
-    Round memory r = rounds[_roundId];
+    Round memory r = s_rounds[_roundId];
     roundId = _roundId;
     answer = getStatusAnswer(r.status);
     startedAt = uint256(r.timestamp);
@@ -220,6 +220,6 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
       uint80 answeredInRound
     )
   {
-    return getRoundData(latestRoundId);
+    return getRoundData(s_latestRoundId);
   }
 }
