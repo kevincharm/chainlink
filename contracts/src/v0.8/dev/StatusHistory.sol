@@ -121,6 +121,7 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
    * @notice Record a new status and timestamp if it has changed since the last round.
    */
   function statusUpdated(bool status, uint64 timestamp) external override {
+    require(initialized, "StatusHistory has not been initialized");
     require(msg.sender == crossDomainMessenger(), "Sender is not the L2 messenger");
 
     uint80 latestRoundId_ = latestRoundId;
@@ -144,8 +145,7 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
 
   /// @inheritdoc AggregatorInterface
   function latestAnswer() external view override returns (int256) {
-    uint80 latestRoundId_ = latestRoundId;
-    if (latestRoundId_ > 0) {
+    if (initialized) {
       return getStatusAnswer(rounds[latestRoundId].status);
     }
 
@@ -154,8 +154,7 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
 
   /// @inheritdoc AggregatorInterface
   function latestTimestamp() external view override returns (uint256) {
-    uint80 latestRoundId_ = latestRoundId;
-    if (latestRoundId_ > 0) {
+    if (initialized) {
       return rounds[latestRoundId].timestamp;
     }
 
@@ -169,7 +168,7 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
 
   /// @inheritdoc AggregatorInterface
   function getAnswer(uint256 roundId) external view override returns (int256) {
-    if (roundId <= type(uint80).max && roundId > 0 && latestRoundId >= roundId) {
+    if (initialized && roundId <= type(uint80).max && latestRoundId >= roundId) {
       return getStatusAnswer(rounds[uint80(roundId)].status);
     }
 
@@ -178,7 +177,7 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
 
   /// @inheritdoc AggregatorInterface
   function getTimestamp(uint256 roundId) external view override returns (uint256) {
-    if (roundId <= type(uint80).max && roundId > 0 && latestRoundId >= roundId) {
+    if (initialized && roundId <= type(uint80).max && latestRoundId >= roundId) {
       return rounds[uint80(roundId)].timestamp;
     }
 
@@ -198,12 +197,11 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
       uint80 answeredInRound
     )
   {
-    uint80 latestRoundId_ = latestRoundId;
-    require(latestRoundId_ > 0 && latestRoundId_ >= _roundId, "No data present");
+    require(initialized && latestRoundId >= _roundId, "No data present");
 
     Round memory r = rounds[_roundId];
     roundId = _roundId;
-    answer = r.status ? int256(1) : int256(0);
+    answer = getStatusAnswer(r.status);
     startedAt = uint256(r.timestamp);
     updatedAt = startedAt;
     answeredInRound = _roundId;
