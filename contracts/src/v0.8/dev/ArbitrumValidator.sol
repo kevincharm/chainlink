@@ -8,7 +8,7 @@ import "../interfaces/AggregatorV3Interface.sol";
 import "../SimpleWriteAccessController.sol";
 
 /* ./dev dependencies - to be moved from ./dev after audit */
-import "./interfaces/ForwarderInterface.sol";
+import "./interfaces/StatusHistoryInterface.sol";
 import "./interfaces/FlagsInterface.sol";
 import "./vendor/arb-bridge-eth/v0.8.0-custom/contracts/bridge/interfaces/IInbox.sol";
 import "./vendor/arb-bridge-eth/v0.8.0-custom/contracts/libraries/AddressAliasHelper.sol";
@@ -37,19 +37,11 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
   /// @dev Precompiled contract that exists in every Arbitrum chain at address(100). Exposes a variety of system-level functionality.
   address constant ARBSYS_ADDR = address(0x0000000000000000000000000000000000000064);
 
-  /// @dev Follows: https://eips.ethereum.org/EIPS/eip-1967
-  address public constant FLAG_ARBITRUM_SEQ_OFFLINE =
-    address(bytes20(bytes32(uint256(keccak256("chainlink.flags.arbitrum-seq-offline")) - 1)));
-  // Encode underlying Flags call/s
-  bytes private constant CALL_RAISE_FLAG =
-    abi.encodeWithSelector(FlagsInterface.raiseFlag.selector, FLAG_ARBITRUM_SEQ_OFFLINE);
-  bytes private constant CALL_LOWER_FLAG =
-    abi.encodeWithSelector(FlagsInterface.lowerFlag.selector, FLAG_ARBITRUM_SEQ_OFFLINE);
   int256 private constant ANSWER_SEQ_OFFLINE = 1;
 
   address public immutable CROSS_DOMAIN_MESSENGER;
   address public immutable L2_CROSS_DOMAIN_FORWARDER;
-  address public immutable L2_FLAGS;
+  address public immutable L2_STATUS_HISTORY;
   // L2 xDomain alias address of this contract
   address public immutable L2_ALIAS = AddressAliasHelper.applyL1ToL2Alias(address(this));
 
@@ -110,7 +102,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
     require(l2FlagsAddr != address(0), "Invalid Flags contract address");
     CROSS_DOMAIN_MESSENGER = crossDomainMessengerAddr;
     L2_CROSS_DOMAIN_FORWARDER = l2CrossDomainForwarderAddr;
-    L2_FLAGS = l2FlagsAddr;
+    L2_STATUS_HISTORY = l2FlagsAddr;
     // Additional L2 payment configuration
     _setConfigAC(configACAddr);
     _setGasConfig(maxGas, gasPriceBid, gasPriceL1FeedAddr);
@@ -263,11 +255,11 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
     // Excess gas on L2 will be sent to the L2 xDomain alias address of this contract
     address refundAddr = L2_ALIAS;
     // Encode the Forwarder call
-    bytes4 selector = ForwarderInterface.forward.selector;
-    address target = L2_FLAGS;
-    // Choose and encode the underlying Flags call
-    bytes memory data = currentAnswer == ANSWER_SEQ_OFFLINE ? CALL_RAISE_FLAG : CALL_LOWER_FLAG;
-    bytes memory message = abi.encodeWithSelector(selector, target, data);
+    bytes4 selector = StatusHistoryInterface.statusUpdated.selector;
+    bool status = currentAnswer == ANSWER_SEQ_OFFLINE;
+    uint64 timestamp = uint64(block.timestamp);
+    // Encode `status` and `timestamp`
+    bytes memory message = abi.encodeWithSelector(selector, status, timestamp);
     // Make the xDomain call
     // NOTICE: We approximate the max submission cost of sending a retryable tx with specific calldata length.
     uint256 maxSubmissionCost = _approximateMaxSubmissionCost(message.length);
