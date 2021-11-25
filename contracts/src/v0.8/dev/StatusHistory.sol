@@ -22,6 +22,9 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
     uint64 timestamp;
   }
 
+  event Initialized();
+  event L1OwnershipTransferred(address indexed from, address indexed to);
+
   string private constant V3_NO_DATA_ERROR = "No data present";
   /// @dev Follows: https://eips.ethereum.org/EIPS/eip-1967
   address public constant FLAG_ARBITRUM_SEQ_OFFLINE =
@@ -32,7 +35,7 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
   uint256 public constant override version = 1;
 
   /// @dev Flags contract to raise/lower flags on, during status transitions
-  FlagsInterface public immutable flags;
+  FlagsInterface public immutable FLAGS;
   /// @dev L1 address
   address private s_l1Owner;
   /// @dev Contract initialization flag
@@ -41,13 +44,10 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
   uint80 private s_latestRoundId = 0;
   mapping(uint80 => Round) private s_rounds;
 
-  event L1OwnershipTransferred(address indexed from, address indexed to);
-  event Initialized();
-
   constructor(address flagsAddress, address l1OwnerAddress) ConfirmedOwner(msg.sender) {
     setL1Owner(l1OwnerAddress);
 
-    flags = FlagsInterface(flagsAddress);
+    FLAGS = FlagsInterface(flagsAddress);
   }
 
   /**
@@ -59,7 +59,7 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
     require(!s_initialized, "Already initialised");
 
     uint64 timestamp = uint64(block.timestamp);
-    bool currentStatus = flags.getFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
+    bool currentStatus = FLAGS.getFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
     Round memory initialRound = Round(currentStatus, timestamp);
     s_rounds[0] = initialRound;
 
@@ -111,9 +111,9 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
    */
   function forwardStatusToFlags(bool status) internal {
     if (status) {
-      flags.raiseFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
+      FLAGS.raiseFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
     } else {
-      flags.lowerFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
+      FLAGS.lowerFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
     }
   }
 
