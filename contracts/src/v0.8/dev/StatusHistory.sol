@@ -6,8 +6,10 @@ import {ForwarderInterface} from "./interfaces/ForwarderInterface.sol";
 import {AggregatorInterface} from "../interfaces/AggregatorInterface.sol";
 import {AggregatorV3Interface} from "../interfaces/AggregatorV3Interface.sol";
 import {AggregatorV2V3Interface} from "../interfaces/AggregatorV2V3Interface.sol";
+import {TypeAndVersionInterface} from "../interfaces/TypeAndVersionInterface.sol";
 import {FlagsInterface} from "./interfaces/FlagsInterface.sol";
 import {StatusHistoryInterface} from "./interfaces/StatusHistoryInterface.sol";
+import {SimpleReadAccessController} from "../SimpleReadAccessController.sol";
 import {ConfirmedOwner} from "../ConfirmedOwner.sol";
 
 /**
@@ -16,7 +18,12 @@ import {ConfirmedOwner} from "../ConfirmedOwner.sol";
  *  records a new answer if the status changed, and raises or lowers the flag on the
  *   stored Flags contract.
  */
-contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, ConfirmedOwner {
+contract StatusHistory is
+  AggregatorV2V3Interface,
+  StatusHistoryInterface,
+  TypeAndVersionInterface,
+  SimpleReadAccessController
+{
   struct Round {
     bool status;
     uint64 timestamp;
@@ -44,7 +51,7 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
   uint80 private s_latestRoundId = 0;
   mapping(uint80 => Round) private s_rounds;
 
-  constructor(address flagsAddress, address l1OwnerAddress) ConfirmedOwner(msg.sender) {
+  constructor(address flagsAddress, address l1OwnerAddress) {
     setL1Owner(l1OwnerAddress);
 
     FLAGS = FlagsInterface(flagsAddress);
@@ -67,6 +74,17 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
     emit Initialized();
     emit NewRound(0, msg.sender, timestamp);
     emit AnswerUpdated(getStatusAnswer(initialRound.status), 0, timestamp);
+  }
+
+  /**
+   * @notice versions:
+   *
+   * - Flags 1.0.0: initial release
+   *
+   * @inheritdoc TypeAndVersionInterface
+   */
+  function typeAndVersion() external pure virtual override returns (string memory) {
+    return "StatusHistory 1.0.0";
   }
 
   /// @return L1 owner address
@@ -144,7 +162,7 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
   }
 
   /// @inheritdoc AggregatorInterface
-  function latestAnswer() external view override returns (int256) {
+  function latestAnswer() external view override checkAccess returns (int256) {
     if (s_initialized) {
       return getStatusAnswer(s_rounds[s_latestRoundId].status);
     }
@@ -153,7 +171,7 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
   }
 
   /// @inheritdoc AggregatorInterface
-  function latestTimestamp() external view override returns (uint256) {
+  function latestTimestamp() external view override checkAccess returns (uint256) {
     if (s_initialized) {
       return s_rounds[s_latestRoundId].timestamp;
     }
@@ -162,12 +180,12 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
   }
 
   /// @inheritdoc AggregatorInterface
-  function latestRound() external view override returns (uint256) {
+  function latestRound() external view override checkAccess returns (uint256) {
     return s_latestRoundId;
   }
 
   /// @inheritdoc AggregatorInterface
-  function getAnswer(uint256 roundId) external view override returns (int256) {
+  function getAnswer(uint256 roundId) external view override checkAccess returns (int256) {
     if (s_initialized && roundId <= type(uint80).max && s_latestRoundId >= roundId) {
       return getStatusAnswer(s_rounds[uint80(roundId)].status);
     }
@@ -176,7 +194,7 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
   }
 
   /// @inheritdoc AggregatorInterface
-  function getTimestamp(uint256 roundId) external view override returns (uint256) {
+  function getTimestamp(uint256 roundId) external view override checkAccess returns (uint256) {
     if (s_initialized && roundId <= type(uint80).max && s_latestRoundId >= roundId) {
       return s_rounds[uint80(roundId)].timestamp;
     }
@@ -189,6 +207,7 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
     public
     view
     override
+    checkAccess
     returns (
       uint80 roundId,
       int256 answer,
@@ -212,6 +231,7 @@ contract StatusHistory is AggregatorV2V3Interface, StatusHistoryInterface, Confi
     external
     view
     override
+    checkAccess
     returns (
       uint80 roundId,
       int256 answer,

@@ -9,6 +9,7 @@ describe('StatusHistory', () => {
   let flags: Contract
   let statusHistory: Contract
   let accessController: Contract
+  let statusHistoryConsumer: Contract
   let deployer: SignerWithAddress
   let l1Owner: SignerWithAddress
   let l2Messenger: SignerWithAddress
@@ -70,6 +71,15 @@ describe('StatusHistory', () => {
     // Once StatusHistory has access, we can initialise the 0th aggregator round
     const initTx = await statusHistory.connect(deployer).initialize()
     await expect(initTx).to.emit(statusHistory, 'Initialized')
+
+    // Mock consumer
+    const statusHistoryConsumerFactory = await ethers.getContractFactory(
+      'src/v0.8/tests/StatusHistoryConsumer.sol:StatusHistoryConsumer',
+      deployer,
+    )
+    statusHistoryConsumer = await statusHistoryConsumerFactory.deploy(
+      statusHistory.address,
+    )
   })
 
   describe('#statusUpdated', () => {
@@ -90,6 +100,7 @@ describe('StatusHistory', () => {
         .statusUpdated(true, timestamp)
       await expect(tx).not.to.emit(statusHistory, 'AnswerUpdated')
       expect(await statusHistory.latestAnswer()).to.equal('1')
+      expect(await statusHistory.latestTimestamp()).to.equal(timestamp)
 
       // Submit another status update, different status, should update
       timestamp = now()
@@ -100,6 +111,7 @@ describe('StatusHistory', () => {
         .to.emit(statusHistory, 'AnswerUpdated')
         .withArgs(0, 2 /** roundId */, timestamp)
       expect(await statusHistory.latestAnswer()).to.equal(0)
+      expect(await statusHistory.latestTimestamp()).to.equal(timestamp)
     })
   })
 
@@ -129,10 +141,47 @@ describe('StatusHistory', () => {
       )
     })
 
-    it('should raise from getRoundData when round does not exist', async () => {
+    it('should raise from #getRoundData when round does not exist', async () => {
       await expect(statusHistory.getRoundData(1)).to.be.revertedWith(
         'No data present',
       )
+    })
+  })
+
+  describe('Protect reads on AggregatorV2V3Interface functions', () => {
+    it('should disallow reads on AggregatorV2V3Interface functions when consuming contract is not whitelisted', async () => {
+      // Sanity - consumer is not whitelisted
+      expect(await statusHistory.checkEnabled()).to.be.true
+      expect(
+        await statusHistory.hasAccess(statusHistoryConsumer.address, '0x00'),
+      ).to.be.false
+
+      // Assert reads are not possible from consuming contract
+      await expect(
+        statusHistoryConsumer.getAggregatorV2Answer(),
+      ).to.be.revertedWith('No access')
+      await expect(
+        statusHistoryConsumer.getAggregatorV3Answer(),
+      ).to.be.revertedWith('No access')
+    })
+
+    it('should allow reads on AggregatorV2V3Interface functions when consuming contract is whitelisted', async () => {
+      // Whitelist consumer
+      await statusHistory.addAccess(statusHistoryConsumer.address)
+      // Sanity - consumer is whitelisted
+      expect(await statusHistory.checkEnabled()).to.be.true
+      expect(
+        await statusHistory.hasAccess(statusHistoryConsumer.address, '0x00'),
+      ).to.be.true
+
+      // Assert reads are possible from consuming contract
+      expect(await statusHistoryConsumer.getAggregatorV2Answer()).to.be.equal(
+        '0',
+      )
+      const [roundId, answer] =
+        await statusHistoryConsumer.getAggregatorV3Answer()
+      expect(roundId).to.equal(0)
+      expect(answer).to.equal(0)
     })
   })
 })
