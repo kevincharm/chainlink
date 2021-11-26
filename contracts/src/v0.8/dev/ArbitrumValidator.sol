@@ -40,7 +40,6 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
   int256 private constant ANSWER_SEQ_OFFLINE = 1;
 
   address public immutable CROSS_DOMAIN_MESSENGER;
-  address public immutable L2_CROSS_DOMAIN_FORWARDER;
   address public immutable L2_STATUS_HISTORY;
   // L2 xDomain alias address of this contract
   address public immutable L2_ALIAS = AddressAliasHelper.applyL1ToL2Alias(address(this));
@@ -79,8 +78,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
 
   /**
    * @param crossDomainMessengerAddr address the xDomain bridge messenger (Arbitrum Inbox L1) contract address
-   * @param l2CrossDomainForwarderAddr the L2 Forwarder contract address
-   * @param l2FlagsAddr the L2 Flags contract address
+   * @param l2StatusHistoryAddr the L2 Flags contract address
    * @param configACAddr address of the access controller for managing gas price on Arbitrum
    * @param maxGas gas limit for immediate L2 execution attempt. A value around 1M should be sufficient
    * @param gasPriceBid maximum L2 gas price to pay
@@ -89,8 +87,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
    */
   constructor(
     address crossDomainMessengerAddr,
-    address l2CrossDomainForwarderAddr,
-    address l2FlagsAddr,
+    address l2StatusHistoryAddr,
     address configACAddr,
     uint256 maxGas,
     uint256 gasPriceBid,
@@ -98,11 +95,9 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
     PaymentStrategy paymentStrategy
   ) {
     require(crossDomainMessengerAddr != address(0), "Invalid xDomain Messenger address");
-    require(l2CrossDomainForwarderAddr != address(0), "Invalid L2 xDomain Forwarder address");
-    require(l2FlagsAddr != address(0), "Invalid Flags contract address");
+    require(l2StatusHistoryAddr != address(0), "Invalid StatusHistory contract address");
     CROSS_DOMAIN_MESSENGER = crossDomainMessengerAddr;
-    L2_CROSS_DOMAIN_FORWARDER = l2CrossDomainForwarderAddr;
-    L2_STATUS_HISTORY = l2FlagsAddr;
+    L2_STATUS_HISTORY = l2StatusHistoryAddr;
     // Additional L2 payment configuration
     _setConfigAC(configACAddr);
     _setGasConfig(maxGas, gasPriceBid, gasPriceL1FeedAddr);
@@ -117,11 +112,14 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
    *   - xDomain `msg.sender` backwards incompatible change (now an alias address)
    *   - new `withdrawFundsFromL2` fn that withdraws from L2 xDomain alias address
    *   - approximation of `maxSubmissionCost` using a L1 gas price feed
+   * - ArbitrumValidator 0.3.0: change target of L2 sequencer status update
+   *   - now calls `statusUpdated` on an L2 StatusHistory contract instead of
+   *     directly calling the Flags contract
    *
    * @inheritdoc TypeAndVersionInterface
    */
   function typeAndVersion() external pure virtual override returns (string memory) {
-    return "ArbitrumValidator 0.2.0";
+    return "ArbitrumValidator 0.3.0";
   }
 
   /// @return stored PaymentStrategy
@@ -254,7 +252,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
 
     // Excess gas on L2 will be sent to the L2 xDomain alias address of this contract
     address refundAddr = L2_ALIAS;
-    // Encode the Forwarder call
+    // Encode the StatusHistory call
     bytes4 selector = StatusHistoryInterface.statusUpdated.selector;
     bool status = currentAnswer == ANSWER_SEQ_OFFLINE;
     uint64 timestamp = uint64(block.timestamp);
@@ -271,7 +269,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
     // NOTICE: In the case of PaymentStrategy.L2 the L2 xDomain alias address needs to be funded, as it will be paying the fee.
     // We also ignore the returned msg number, that can be queried via the `InboxMessageDelivered` event.
     IInbox(CROSS_DOMAIN_MESSENGER).createRetryableTicketNoRefundAliasRewrite{value: l1PaymentValue}(
-      L2_CROSS_DOMAIN_FORWARDER, // target
+      L2_STATUS_HISTORY, // target
       0, // L2 call value
       maxSubmissionCost,
       refundAddr, // excessFeeRefundAddress
