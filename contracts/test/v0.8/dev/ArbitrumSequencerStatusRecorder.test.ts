@@ -126,6 +126,29 @@ describe('ArbitrumSequencerStatusRecorder', () => {
         timestamp,
       )
     })
+
+    it('should consume a known amount of gas', async () => {
+      // Sanity - start at flag = 0 (`false`)
+      expect(await arbitrumSequencerStatusRecorder.latestAnswer()).to.equal(0)
+
+      // Gas for no update
+      const _noUpdateTx = await arbitrumSequencerStatusRecorder
+        .connect(l2Messenger)
+        .updateStatus(false, now())
+      const noUpdateTx = await _noUpdateTx.wait(1)
+      // Assert no update
+      expect(await arbitrumSequencerStatusRecorder.latestAnswer()).to.equal(0)
+      expect(noUpdateTx.cumulativeGasUsed).to.equal(26436)
+
+      // Gas for update
+      const _updateTx = await arbitrumSequencerStatusRecorder
+        .connect(l2Messenger)
+        .updateStatus(true, now())
+      const updateTx = await _updateTx.wait(1)
+      // Assert update
+      expect(await arbitrumSequencerStatusRecorder.latestAnswer()).to.equal(1)
+      expect(updateTx.cumulativeGasUsed).to.equal(92939)
+    })
   })
 
   describe('AggregatorV3Interface', () => {

@@ -73,7 +73,7 @@ describe('ArbitrumValidator', () => {
   describe('#validate', async () => {
     it('post sequencer offline', async () => {
       await arbitrumValidator.addAccess(eoaValidator.address)
-      const now = Math.ceil(Date.now() / 1000) + 1000
+      const now = BigNumber.from(Date.now()).div(1000).add(1000)
       await ethers.provider.send('evm_setAutomine', [false])
       await ethers.provider.send('evm_setNextBlockTimestamp', [now])
       const tx = await arbitrumValidator
