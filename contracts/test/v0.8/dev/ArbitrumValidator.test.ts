@@ -5,7 +5,7 @@ import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
 import { FakeContract, smock } from '@defi-wonderland/smock'
 /// Pick ABIs from compilation
 // @ts-ignore
-import { abi as statusHistoryAbi } from '../../../artifacts/src/v0.8/dev/StatusHistory.sol/StatusHistory.json'
+import { abi as arbitrumSequencerStatusRecorderAbi } from '../../../artifacts/src/v0.8/dev/ArbitrumSequencerStatusRecorder.sol/ArbitrumSequencerStatusRecorder.json'
 // @ts-ignore
 import { abi as arbitrumInboxAbi } from '../../../artifacts/src/v0.8/dev/vendor/arb-bridge-eth/v0.8.0-custom/contracts/bridge/interfaces/IInbox.sol/IInbox.json'
 // @ts-ignore
@@ -20,7 +20,7 @@ describe('ArbitrumValidator', () => {
   let accessController: Contract
   let l1GasFeed: FakeContract
   let arbitrumInbox: FakeContract
-  let statusHistory: FakeContract
+  let arbitrumSequencerStatusRecorder: FakeContract
   let deployer: SignerWithAddress
   let eoaValidator: SignerWithAddress
   let arbitrumValidatorL2Address: string
@@ -38,7 +38,9 @@ describe('ArbitrumValidator', () => {
     accessController = await accessControllerFactory.deploy()
 
     // Unused, L2
-    statusHistory = await smock.fake(statusHistoryAbi)
+    arbitrumSequencerStatusRecorder = await smock.fake(
+      arbitrumSequencerStatusRecorderAbi,
+    )
     arbitrumInbox = await smock.fake(arbitrumInboxAbi)
     l1GasFeed = await smock.fake(aggregatorAbi)
 
@@ -49,7 +51,7 @@ describe('ArbitrumValidator', () => {
     )
     arbitrumValidator = await arbitrumValidatorFactory.deploy(
       arbitrumInbox.address,
-      statusHistory.address,
+      arbitrumSequencerStatusRecorder.address,
       accessController.address,
       MAX_GAS /** L1 gas bid */,
       GAS_PRICE_BID /** L2 gas bid */,
@@ -83,10 +85,11 @@ describe('ArbitrumValidator', () => {
       expect(arbitrumInbox.createRetryableTicketNoRefundAliasRewrite).to.be
         .called
 
-      const statusHistoryCallData = statusHistory.interface.encodeFunctionData(
-        'statusUpdated',
-        [true, now],
-      )
+      const arbitrumSequencerStatusRecorderCallData =
+        arbitrumSequencerStatusRecorder.interface.encodeFunctionData(
+          'updateStatus',
+          [true, now],
+        )
       // TODO: Smock matchers don't match BigNumbers properly
       //  Remove `not` to visually confirm the output (will fail)
       expect(
@@ -99,7 +102,7 @@ describe('ArbitrumValidator', () => {
         arbitrumValidatorL2Address,
         MAX_GAS,
         GAS_PRICE_BID,
-        statusHistoryCallData,
+        arbitrumSequencerStatusRecorderCallData,
       )
     })
   })

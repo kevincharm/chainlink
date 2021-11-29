@@ -5,11 +5,11 @@ import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
 
 const now = () => BigNumber.from(Date.now()).div(1000)
 
-describe('StatusHistory', () => {
+describe('ArbitrumSequencerStatusRecorder', () => {
   let flags: Contract
-  let statusHistory: Contract
+  let arbitrumSequencerStatusRecorder: Contract
   let accessController: Contract
-  let statusHistoryConsumer: Contract
+  let arbitrumSequencerStatusRecorderConsumer: Contract
   let deployer: SignerWithAddress
   let l1Owner: SignerWithAddress
   let l2Messenger: SignerWithAddress
@@ -53,72 +53,85 @@ describe('StatusHistory', () => {
     )
     await accessController.addAccess(flags.address)
 
-    const statusHistoryFactory = await ethers.getContractFactory(
-      'src/v0.8/dev/StatusHistory.sol:StatusHistory',
-      deployer,
-    )
-    statusHistory = await statusHistoryFactory.deploy(
-      flags.address,
-      l1Owner.address,
-    )
-    // Required for StatusHistory to raise/lower flags
-    await accessController.addAccess(statusHistory.address)
-    // Required for StatusHistory to read flags
-    await flags.addAccess(statusHistory.address)
+    const arbitrumSequencerStatusRecorderFactory =
+      await ethers.getContractFactory(
+        'src/v0.8/dev/ArbitrumSequencerStatusRecorder.sol:ArbitrumSequencerStatusRecorder',
+        deployer,
+      )
+    arbitrumSequencerStatusRecorder =
+      await arbitrumSequencerStatusRecorderFactory.deploy(
+        flags.address,
+        l1Owner.address,
+      )
+    // Required for ArbitrumSequencerStatusRecorder to raise/lower flags
+    await accessController.addAccess(arbitrumSequencerStatusRecorder.address)
+    // Required for ArbitrumSequencerStatusRecorder to read flags
+    await flags.addAccess(arbitrumSequencerStatusRecorder.address)
 
     // Deployer requires access to invoke initialize
     await accessController.addAccess(deployer.address)
-    // Once StatusHistory has access, we can initialise the 0th aggregator round
-    const initTx = await statusHistory.connect(deployer).initialize()
-    await expect(initTx).to.emit(statusHistory, 'Initialized')
+    // Once ArbitrumSequencerStatusRecorder has access, we can initialise the 0th aggregator round
+    const initTx = await arbitrumSequencerStatusRecorder
+      .connect(deployer)
+      .initialize()
+    await expect(initTx).to.emit(arbitrumSequencerStatusRecorder, 'Initialized')
 
     // Mock consumer
-    const statusHistoryConsumerFactory = await ethers.getContractFactory(
-      'src/v0.8/tests/StatusHistoryConsumer.sol:StatusHistoryConsumer',
-      deployer,
-    )
-    statusHistoryConsumer = await statusHistoryConsumerFactory.deploy(
-      statusHistory.address,
-    )
+    const arbitrumSequencerStatusRecorderConsumerFactory =
+      await ethers.getContractFactory(
+        'src/v0.8/tests/ArbitrumSequencerStatusRecorderConsumer.sol:ArbitrumSequencerStatusRecorderConsumer',
+        deployer,
+      )
+    arbitrumSequencerStatusRecorderConsumer =
+      await arbitrumSequencerStatusRecorderConsumerFactory.deploy(
+        arbitrumSequencerStatusRecorder.address,
+      )
   })
 
-  describe('#statusUpdated', () => {
+  describe('#updateStatus', () => {
     it('should only update status when status has changed', async () => {
       let timestamp = now()
-      let tx = await statusHistory
+      let tx = await arbitrumSequencerStatusRecorder
         .connect(l2Messenger)
-        .statusUpdated(true, timestamp)
+        .updateStatus(true, timestamp)
       await expect(tx)
-        .to.emit(statusHistory, 'AnswerUpdated')
+        .to.emit(arbitrumSequencerStatusRecorder, 'AnswerUpdated')
         .withArgs(1, 1 /** roundId */, timestamp)
-      expect(await statusHistory.latestAnswer()).to.equal(1)
+      expect(await arbitrumSequencerStatusRecorder.latestAnswer()).to.equal(1)
 
       // Submit another status update, same status, should ignore
       timestamp = now()
-      tx = await statusHistory
+      tx = await arbitrumSequencerStatusRecorder
         .connect(l2Messenger)
-        .statusUpdated(true, timestamp)
-      await expect(tx).not.to.emit(statusHistory, 'AnswerUpdated')
-      expect(await statusHistory.latestAnswer()).to.equal('1')
-      expect(await statusHistory.latestTimestamp()).to.equal(timestamp)
+        .updateStatus(true, timestamp)
+      await expect(tx).not.to.emit(
+        arbitrumSequencerStatusRecorder,
+        'AnswerUpdated',
+      )
+      expect(await arbitrumSequencerStatusRecorder.latestAnswer()).to.equal('1')
+      expect(await arbitrumSequencerStatusRecorder.latestTimestamp()).to.equal(
+        timestamp,
+      )
 
       // Submit another status update, different status, should update
       timestamp = now()
-      tx = await statusHistory
+      tx = await arbitrumSequencerStatusRecorder
         .connect(l2Messenger)
-        .statusUpdated(false, timestamp)
+        .updateStatus(false, timestamp)
       await expect(tx)
-        .to.emit(statusHistory, 'AnswerUpdated')
+        .to.emit(arbitrumSequencerStatusRecorder, 'AnswerUpdated')
         .withArgs(0, 2 /** roundId */, timestamp)
-      expect(await statusHistory.latestAnswer()).to.equal(0)
-      expect(await statusHistory.latestTimestamp()).to.equal(timestamp)
+      expect(await arbitrumSequencerStatusRecorder.latestAnswer()).to.equal(0)
+      expect(await arbitrumSequencerStatusRecorder.latestTimestamp()).to.equal(
+        timestamp,
+      )
     })
   })
 
   describe('AggregatorV3Interface', () => {
     it('should return valid answer from getRoundData and latestRoundData', async () => {
       let [roundId, answer, startedAt, updatedAt, answeredInRound] =
-        await statusHistory.getRoundData(0)
+        await arbitrumSequencerStatusRecorder.getRoundData(0)
       expect(roundId).to.equal(0)
       expect(answer).to.equal(0)
       expect(answeredInRound).to.equal(roundId)
@@ -126,9 +139,11 @@ describe('StatusHistory', () => {
 
       // Submit status update with different status, should update
       const timestamp = now()
-      await statusHistory.connect(l2Messenger).statusUpdated(true, timestamp)
+      await arbitrumSequencerStatusRecorder
+        .connect(l2Messenger)
+        .updateStatus(true, timestamp)
       ;[roundId, answer, startedAt, updatedAt, answeredInRound] =
-        await statusHistory.getRoundData(1)
+        await arbitrumSequencerStatusRecorder.getRoundData(1)
       expect(roundId).to.equal(1)
       expect(answer).to.equal(1)
       expect(answeredInRound).to.equal(roundId)
@@ -136,50 +151,58 @@ describe('StatusHistory', () => {
       expect(updatedAt).to.equal(startedAt)
 
       // Assert latestRoundData corresponds to latest round id
-      expect(await statusHistory.getRoundData(1)).to.deep.equal(
-        await statusHistory.latestRoundData(),
-      )
+      expect(
+        await arbitrumSequencerStatusRecorder.getRoundData(1),
+      ).to.deep.equal(await arbitrumSequencerStatusRecorder.latestRoundData())
     })
 
     it('should raise from #getRoundData when round does not exist', async () => {
-      await expect(statusHistory.getRoundData(1)).to.be.revertedWith(
-        'No data present',
-      )
+      await expect(
+        arbitrumSequencerStatusRecorder.getRoundData(1),
+      ).to.be.revertedWith('No data present')
     })
   })
 
   describe('Protect reads on AggregatorV2V3Interface functions', () => {
     it('should disallow reads on AggregatorV2V3Interface functions when consuming contract is not whitelisted', async () => {
       // Sanity - consumer is not whitelisted
-      expect(await statusHistory.checkEnabled()).to.be.true
+      expect(await arbitrumSequencerStatusRecorder.checkEnabled()).to.be.true
       expect(
-        await statusHistory.hasAccess(statusHistoryConsumer.address, '0x00'),
+        await arbitrumSequencerStatusRecorder.hasAccess(
+          arbitrumSequencerStatusRecorderConsumer.address,
+          '0x00',
+        ),
       ).to.be.false
 
       // Assert reads are not possible from consuming contract
       await expect(
-        statusHistoryConsumer.getAggregatorV2Answer(),
+        arbitrumSequencerStatusRecorderConsumer.getAggregatorV2Answer(),
       ).to.be.revertedWith('No access')
       await expect(
-        statusHistoryConsumer.getAggregatorV3Answer(),
+        arbitrumSequencerStatusRecorderConsumer.getAggregatorV3Answer(),
       ).to.be.revertedWith('No access')
     })
 
     it('should allow reads on AggregatorV2V3Interface functions when consuming contract is whitelisted', async () => {
       // Whitelist consumer
-      await statusHistory.addAccess(statusHistoryConsumer.address)
+      await arbitrumSequencerStatusRecorder.addAccess(
+        arbitrumSequencerStatusRecorderConsumer.address,
+      )
       // Sanity - consumer is whitelisted
-      expect(await statusHistory.checkEnabled()).to.be.true
+      expect(await arbitrumSequencerStatusRecorder.checkEnabled()).to.be.true
       expect(
-        await statusHistory.hasAccess(statusHistoryConsumer.address, '0x00'),
+        await arbitrumSequencerStatusRecorder.hasAccess(
+          arbitrumSequencerStatusRecorderConsumer.address,
+          '0x00',
+        ),
       ).to.be.true
 
       // Assert reads are possible from consuming contract
-      expect(await statusHistoryConsumer.getAggregatorV2Answer()).to.be.equal(
-        '0',
-      )
+      expect(
+        await arbitrumSequencerStatusRecorderConsumer.getAggregatorV2Answer(),
+      ).to.be.equal('0')
       const [roundId, answer] =
-        await statusHistoryConsumer.getAggregatorV3Answer()
+        await arbitrumSequencerStatusRecorderConsumer.getAggregatorV3Answer()
       expect(roundId).to.equal(0)
       expect(answer).to.equal(0)
     })

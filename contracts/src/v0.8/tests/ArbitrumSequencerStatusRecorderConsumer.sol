@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {StatusHistory} from "../dev/StatusHistory.sol";
+import {ArbitrumSequencerStatusRecorder} from "../dev/ArbitrumSequencerStatusRecorder.sol";
 
-contract StatusHistoryConsumer {
-  StatusHistory public immutable STATUS_HISTORY;
+contract ArbitrumSequencerStatusRecorderConsumer {
+  ArbitrumSequencerStatusRecorder public immutable STATUS_HISTORY;
 
-  constructor(address statusHistoryAddress) {
-    STATUS_HISTORY = StatusHistory(statusHistoryAddress);
+  constructor(address arbitrumSequencerStatusRecorderAddress) {
+    STATUS_HISTORY = ArbitrumSequencerStatusRecorder(arbitrumSequencerStatusRecorderAddress);
   }
 
   function getAggregatorV2Answer() external view returns (int256 answer) {

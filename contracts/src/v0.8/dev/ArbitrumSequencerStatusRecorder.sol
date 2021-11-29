@@ -8,19 +8,19 @@ import {AggregatorV3Interface} from "../interfaces/AggregatorV3Interface.sol";
 import {AggregatorV2V3Interface} from "../interfaces/AggregatorV2V3Interface.sol";
 import {TypeAndVersionInterface} from "../interfaces/TypeAndVersionInterface.sol";
 import {FlagsInterface} from "./interfaces/FlagsInterface.sol";
-import {StatusHistoryInterface} from "./interfaces/StatusHistoryInterface.sol";
+import {ArbitrumSequencerStatusRecorderInterface} from "./interfaces/ArbitrumSequencerStatusRecorderInterface.sol";
 import {SimpleReadAccessController} from "../SimpleReadAccessController.sol";
 import {ConfirmedOwner} from "../ConfirmedOwner.sol";
 
 /**
- * @title StatusHistory - L2 status history aggregator
+ * @title ArbitrumSequencerStatusRecorder - L2 status history aggregator
  * @notice L2 contract that receives status updates from a specific L1 address,
  *  records a new answer if the status changed, and raises or lowers the flag on the
  *   stored Flags contract.
  */
-contract StatusHistory is
+contract ArbitrumSequencerStatusRecorder is
   AggregatorV2V3Interface,
-  StatusHistoryInterface,
+  ArbitrumSequencerStatusRecorderInterface,
   TypeAndVersionInterface,
   SimpleReadAccessController
 {
@@ -84,7 +84,7 @@ contract StatusHistory is
    * @inheritdoc TypeAndVersionInterface
    */
   function typeAndVersion() external pure virtual override returns (string memory) {
-    return "StatusHistory 1.0.0";
+    return "ArbitrumSequencerStatusRecorder 1.0.0";
   }
 
   /// @return L1 owner address
@@ -138,8 +138,8 @@ contract StatusHistory is
   /**
    * @notice Record a new status and timestamp if it has changed since the last round.
    */
-  function statusUpdated(bool status, uint64 timestamp) external override {
-    require(s_initialized, "StatusHistory has not been initialized");
+  function updateStatus(bool status, uint64 timestamp) external override {
+    require(s_initialized, "ArbitrumSequencerStatusRecorder has not been initialized");
     require(msg.sender == crossDomainMessenger(), "Sender is not the L2 messenger");
 
     uint80 latestRoundId = s_latestRoundId;
