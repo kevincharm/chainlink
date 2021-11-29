@@ -127,7 +127,7 @@ describe('ArbitrumSequencerStatusRecorder', () => {
       )
     })
 
-    it('should consume a known amount of gas', async () => {
+    it('should consume a known amount of gas @skip-coverage', async () => {
       // Sanity - start at flag = 0 (`false`)
       expect(await arbitrumSequencerStatusRecorder.latestAnswer()).to.equal(0)
 
