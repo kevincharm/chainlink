@@ -4,14 +4,14 @@ pragma solidity ^0.8.0;
 import {ArbitrumSequencerStatusRecorder} from "../dev/ArbitrumSequencerStatusRecorder.sol";
 
 contract ArbitrumSequencerStatusRecorderConsumer {
-  ArbitrumSequencerStatusRecorder public immutable STATUS_HISTORY;
+  ArbitrumSequencerStatusRecorder public immutable SEQ_STATUS_RECORDER;
 
   constructor(address arbitrumSequencerStatusRecorderAddress) {
-    STATUS_HISTORY = ArbitrumSequencerStatusRecorder(arbitrumSequencerStatusRecorderAddress);
+    SEQ_STATUS_RECORDER = ArbitrumSequencerStatusRecorder(arbitrumSequencerStatusRecorderAddress);
   }
 
   function getAggregatorV2Answer() external view returns (int256 answer) {
-    return STATUS_HISTORY.latestAnswer();
+    return SEQ_STATUS_RECORDER.latestAnswer();
   }
 
   function getAggregatorV3Answer()
@@ -25,6 +25,6 @@ contract ArbitrumSequencerStatusRecorderConsumer {
       uint80 answeredInRound
     )
   {
-    return STATUS_HISTORY.latestRoundData();
+    return SEQ_STATUS_RECORDER.latestRoundData();
   }
 }

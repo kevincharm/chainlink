@@ -40,7 +40,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
   int256 private constant ANSWER_SEQ_OFFLINE = 1;
 
   address public immutable CROSS_DOMAIN_MESSENGER;
-  address public immutable L2_STATUS_HISTORY;
+  address public immutable L2_SEQ_STATUS_RECORDER;
   // L2 xDomain alias address of this contract
   address public immutable L2_ALIAS = AddressAliasHelper.applyL1ToL2Alias(address(this));
 
@@ -100,7 +100,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
       "Invalid ArbitrumSequencerStatusRecorder contract address"
     );
     CROSS_DOMAIN_MESSENGER = crossDomainMessengerAddr;
-    L2_STATUS_HISTORY = l2ArbitrumSequencerStatusRecorderAddr;
+    L2_SEQ_STATUS_RECORDER = l2ArbitrumSequencerStatusRecorderAddr;
     // Additional L2 payment configuration
     _setConfigAC(configACAddr);
     _setGasConfig(maxGas, gasPriceBid, gasPriceL1FeedAddr);
@@ -272,7 +272,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
     // NOTICE: In the case of PaymentStrategy.L2 the L2 xDomain alias address needs to be funded, as it will be paying the fee.
     // We also ignore the returned msg number, that can be queried via the `InboxMessageDelivered` event.
     IInbox(CROSS_DOMAIN_MESSENGER).createRetryableTicketNoRefundAliasRewrite{value: l1PaymentValue}(
-      L2_STATUS_HISTORY, // target
+      L2_SEQ_STATUS_RECORDER, // target
       0, // L2 call value
       maxSubmissionCost,
       refundAddr, // excessFeeRefundAddress
