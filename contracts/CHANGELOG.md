@@ -6,6 +6,7 @@
 
 - Prettier Solidity formatting applied to v0.7 and above.
 - ERC677ReceiverInterface added in v0.8.
+- `ArbitrumSequenceStatusRecorderInterface` and ``ArbitrumSequenceStatusRecorder` added in v0.8.
 
 ### Changed:
 
@@ -14,6 +15,8 @@
   the newly enabled `buildOperatorRequest` along with `sendOperatorRequest` or
   `sendOperatorRequestTo`.
 - Updated function comments in `v0.6/interfaces/KeeperCompatibleInterface.sol` and `v0.8/interfaces/KeeperCompatibleInterface.sol` to match the latest in v0.7.
+- Changed `ArbitrumValidator#validate` target to `ArbitrumSequenceStatusRecorder` instead of
+  Flags contract.
 
 ## 0.2.2 - 2021-09-21
 
