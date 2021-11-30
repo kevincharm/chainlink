@@ -114,7 +114,7 @@ contract ArbitrumSequencerStatusRecorder is
   /**
    * @dev Returns an AggregatorV2V3Interface compatible answer from status flag
    */
-  function getStatusAnswer(bool stat) internal pure returns (int256) {
+  function getStatusAnswer(bool stat) private pure returns (int256) {
     return stat ? int256(1) : int256(0);
   }
 
