@@ -1,5 +1,5 @@
 import { ethers } from 'hardhat'
-import { BigNumber, Contract, ContractFactory } from 'ethers'
+import { BigNumber, BigNumberish, Contract, ContractFactory } from 'ethers'
 import { expect } from 'chai'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
 import {
@@ -13,6 +13,21 @@ import { abi as arbitrumSequencerStatusRecorderAbi } from '../../../artifacts/sr
 import { abi as arbitrumInboxAbi } from '../../../artifacts/src/v0.8/dev/vendor/arb-bridge-eth/v0.8.0-custom/contracts/bridge/interfaces/IInbox.sol/IInbox.json'
 // @ts-ignore
 import { abi as aggregatorAbi } from '../../../artifacts/src/v0.8/interfaces/AggregatorV2V3Interface.sol/AggregatorV2V3Interface.json'
+
+const truncateBigNumToAddress = (num: BigNumberish) => {
+  // Pad, then slice off '0x' prefix
+  const hexWithoutPrefix = ethers.utils
+    .hexZeroPad(BigNumber.from(num).toHexString(), 20)
+    .slice(2)
+  // Ethereum address is 20B -> 40 hex chars w/o 0x prefix
+  const truncated = hexWithoutPrefix
+    .split('')
+    .reverse()
+    .slice(0, 40)
+    .reverse()
+    .join('')
+  return '0x' + truncated
+}
 
 describe('ArbitrumValidator', () => {
   const MAX_GAS = BigNumber.from(1_000_000)
@@ -80,7 +95,7 @@ describe('ArbitrumValidator', () => {
       value: ethers.utils.parseEther('1.0'),
     })
     arbitrumValidatorL2Address = ethers.utils.getAddress(
-      ethers.utils.hexValue(
+      truncateBigNumToAddress(
         BigNumber.from(arbitrumValidator.address).add(
           '0x1111000000000000000000000000000000001111',
         ),
