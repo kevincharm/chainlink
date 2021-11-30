@@ -1,8 +1,11 @@
 import { ethers } from 'hardhat'
-import { BigNumber, Contract } from 'ethers'
-import { expect, use } from 'chai'
+import { BigNumber, Contract, ContractFactory } from 'ethers'
+import { expect } from 'chai'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
-import { FakeContract, smock } from '@defi-wonderland/smock'
+import {
+  deployMockContract,
+  MockContract,
+} from '@ethereum-waffle/mock-contract'
 /// Pick ABIs from compilation
 // @ts-ignore
 import { abi as arbitrumSequencerStatusRecorderAbi } from '../../../artifacts/src/v0.8/dev/ArbitrumSequencerStatusRecorder.sol/ArbitrumSequencerStatusRecorder.json'
@@ -11,16 +14,17 @@ import { abi as arbitrumInboxAbi } from '../../../artifacts/src/v0.8/dev/vendor/
 // @ts-ignore
 import { abi as aggregatorAbi } from '../../../artifacts/src/v0.8/interfaces/AggregatorV2V3Interface.sol/AggregatorV2V3Interface.json'
 
-use(smock.matchers)
-
 describe('ArbitrumValidator', () => {
   const MAX_GAS = BigNumber.from(1_000_000)
   const GAS_PRICE_BID = BigNumber.from(1_000_000)
+  /** Fake L2 target */
+  const L2_SEQ_STATUS_RECORDER_ADDRESS =
+    '0x491B1dDA0A8fa069bbC1125133A975BF4e85a91b'
   let arbitrumValidator: Contract
   let accessController: Contract
-  let l1GasFeed: FakeContract
-  let arbitrumInbox: FakeContract
-  let arbitrumSequencerStatusRecorder: FakeContract
+  let arbitrumSequencerStatusRecorderFactory: ContractFactory
+  let mockArbitrumInbox: Contract
+  let l1GasFeed: MockContract
   let deployer: SignerWithAddress
   let eoaValidator: SignerWithAddress
   let arbitrumValidatorL2Address: string
@@ -37,21 +41,33 @@ describe('ArbitrumValidator', () => {
     )
     accessController = await accessControllerFactory.deploy()
 
-    // Unused, L2
-    arbitrumSequencerStatusRecorder = await smock.fake(
-      arbitrumSequencerStatusRecorderAbi,
+    // Required for building the calldata
+    arbitrumSequencerStatusRecorderFactory = await ethers.getContractFactory(
+      'src/v0.8/dev/ArbitrumSequencerStatusRecorder.sol:ArbitrumSequencerStatusRecorder',
+      deployer,
     )
-    arbitrumInbox = await smock.fake(arbitrumInboxAbi)
-    l1GasFeed = await smock.fake(aggregatorAbi)
+    l1GasFeed = await deployMockContract(deployer as any, aggregatorAbi)
+    await l1GasFeed.mock.latestRoundData.returns(
+      '73786976294838220258' /** roundId */,
+      '96800000000' /** answer */,
+      '163826896' /** startedAt */,
+      '1638268960' /** updatedAt */,
+      '73786976294838220258' /** answeredInRound */,
+    )
+    // Arbitrum Inbox contract on L1
+    const mockArbitrumInboxFactory = await ethers.getContractFactory(
+      'src/v0.8/tests/MockArbitrumInbox.sol:MockArbitrumInbox',
+    )
+    mockArbitrumInbox = await mockArbitrumInboxFactory.deploy()
 
-    // Mock consumer
+    // Contract under test
     const arbitrumValidatorFactory = await ethers.getContractFactory(
       'src/v0.8/dev/ArbitrumValidator.sol:ArbitrumValidator',
       deployer,
     )
     arbitrumValidator = await arbitrumValidatorFactory.deploy(
-      arbitrumInbox.address,
-      arbitrumSequencerStatusRecorder.address,
+      mockArbitrumInbox.address,
+      L2_SEQ_STATUS_RECORDER_ADDRESS,
       accessController.address,
       MAX_GAS /** L1 gas bid */,
       GAS_PRICE_BID /** L2 gas bid */,
@@ -70,40 +86,32 @@ describe('ArbitrumValidator', () => {
     )
   })
 
-  describe('#validate', async () => {
+  describe('#validate', () => {
     it('post sequencer offline', async () => {
       await arbitrumValidator.addAccess(eoaValidator.address)
-      const now = Math.ceil(Date.now() / 1000) + 1000
-      await ethers.provider.send('evm_setAutomine', [false])
-      await ethers.provider.send('evm_setNextBlockTimestamp', [now])
-      const tx = await arbitrumValidator
-        .connect(eoaValidator)
-        .validate(0, 0, 1, 1)
-      await ethers.provider.send('evm_mine', [])
-      await tx.wait(1)
-      await ethers.provider.send('evm_setAutomine', [true])
-      expect(arbitrumInbox.createRetryableTicketNoRefundAliasRewrite).to.be
-        .called
 
+      const now = Math.ceil(Date.now() / 1000) + 1000
+      await ethers.provider.send('evm_setNextBlockTimestamp', [now])
       const arbitrumSequencerStatusRecorderCallData =
-        arbitrumSequencerStatusRecorder.interface.encodeFunctionData(
+        arbitrumSequencerStatusRecorderFactory.interface.encodeFunctionData(
           'updateStatus',
           [true, now],
         )
-      // TODO: Smock matchers don't match BigNumbers properly
-      //  Remove `not` to visually confirm the output (will fail)
-      expect(
-        arbitrumInbox.createRetryableTicketNoRefundAliasRewrite,
-      ).not.to.be.calledWith(
-        1,
-        0,
-        0,
-        arbitrumValidatorL2Address,
-        arbitrumValidatorL2Address,
-        MAX_GAS,
-        GAS_PRICE_BID,
-        arbitrumSequencerStatusRecorderCallData,
-      )
+      await expect(arbitrumValidator.connect(eoaValidator).validate(0, 0, 1, 1))
+        .to.emit(
+          mockArbitrumInbox,
+          'RetryableTicketNoRefundAliasRewriteCreated',
+        )
+        .withArgs(
+          L2_SEQ_STATUS_RECORDER_ADDRESS,
+          0,
+          '367537500000',
+          arbitrumValidatorL2Address,
+          arbitrumValidatorL2Address,
+          MAX_GAS,
+          GAS_PRICE_BID,
+          arbitrumSequencerStatusRecorderCallData,
+        )
     })
   })
 })
