@@ -103,7 +103,7 @@ contract ArbitrumSequencerStatusRecorder is
   }
 
   /// @notice internal method that stores the L1 owner
-  function setL1Owner(address to) internal {
+  function setL1Owner(address to) private {
     address from = s_l1Owner;
     if (from != to) {
       s_l1Owner = to;
