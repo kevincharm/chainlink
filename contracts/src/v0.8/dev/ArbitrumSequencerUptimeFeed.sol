@@ -44,13 +44,13 @@ contract ArbitrumSequencerUptimeFeed is
   /// @dev Flags contract to raise/lower flags on, during status transitions
   FlagsInterface public immutable FLAGS;
   /// @dev L1 address
-  address private s_l1Owner;
+  address private s_l1Sender;
   /// @dev s_latestRoundId == 0 means this contract is uninitialized.
   uint80 private s_latestRoundId = 0;
   mapping(uint80 => Round) private s_rounds;
 
-  constructor(address flagsAddress, address l1OwnerAddress) {
-    setL1Owner(l1OwnerAddress);
+  constructor(address flagsAddress, address l1SenderAddress) {
+    setL1Sender(l1SenderAddress);
 
     FLAGS = FlagsInterface(flagsAddress);
   }
@@ -88,25 +88,25 @@ contract ArbitrumSequencerUptimeFeed is
     return "ArbitrumSequencerUptimeFeed 1.0.0";
   }
 
-  /// @return L1 owner address
-  function l1Owner() public view virtual returns (address) {
-    return s_l1Owner;
+  /// @return L1 sender address
+  function l1Sender() public view virtual returns (address) {
+    return s_l1Sender;
   }
 
   /**
-   * @notice transfer ownership of this account to a new L1 owner
-   * @dev Forwarding can be disabled by setting the L1 owner as `address(0)`. Accessible only by owner.
-   * @param to new L1 owner that will be allowed to call the forward fn
+   * @notice Set the allowed L1 sender for this contract to a new L1 sender
+   * @dev Can be disabled by setting the L1 sender as `address(0)`. Accessible only by owner.
+   * @param to new L1 sender that will be allowed to call `updateStatus` on this contract
    */
-  function transferL1Ownership(address to) external virtual onlyOwner {
-    setL1Owner(to);
+  function transferL1Sender(address to) external virtual onlyOwner {
+    setL1Sender(to);
   }
 
   /// @notice internal method that stores the L1 owner
-  function setL1Owner(address to) private {
-    address from = s_l1Owner;
+  function setL1Sender(address to) private {
+    address from = s_l1Sender;
     if (from != to) {
-      s_l1Owner = to;
+      s_l1Sender = to;
       emit L1OwnershipTransferred(from, to);
     }
   }
@@ -122,7 +122,7 @@ contract ArbitrumSequencerUptimeFeed is
    * @notice The L2 xDomain `msg.sender`, generated from L1 sender address
    */
   function crossDomainMessenger() public view returns (address) {
-    return AddressAliasHelper.applyL1ToL2Alias(l1Owner());
+    return AddressAliasHelper.applyL1ToL2Alias(l1Sender());
   }
 
   /**
