@@ -8,7 +8,7 @@ import "../interfaces/AggregatorV3Interface.sol";
 import "../SimpleWriteAccessController.sol";
 
 /* ./dev dependencies - to be moved from ./dev after audit */
-import "./interfaces/ArbitrumSequencerUptimeFeedInterface.sol";
+import "./interfaces/L2SequencerUptimeFeedInterface.sol";
 import "./interfaces/FlagsInterface.sol";
 import "./vendor/arb-bridge-eth/v0.8.0-custom/contracts/bridge/interfaces/IInbox.sol";
 import "./vendor/arb-bridge-eth/v0.8.0-custom/contracts/libraries/AddressAliasHelper.sol";
@@ -112,7 +112,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
    *   - xDomain `msg.sender` backwards incompatible change (now an alias address)
    *   - new `withdrawFundsFromL2` fn that withdraws from L2 xDomain alias address
    *   - approximation of `maxSubmissionCost` using a L1 gas price feed
-   * - ArbitrumValidator 0.3.0: change target of L2 sequencer status update
+   * - ArbitrumValidator 1.0.0: change target of L2 sequencer status update
    *   - now calls `updateStatus` on an L2 ArbitrumSequencerUptimeFeed contract instead of
    *     directly calling the Flags contract
    *
@@ -253,7 +253,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
     // Excess gas on L2 will be sent to the L2 xDomain alias address of this contract
     address refundAddr = L2_ALIAS;
     // Encode the ArbitrumSequencerUptimeFeed call
-    bytes4 selector = ArbitrumSequencerUptimeFeedInterface.updateStatus.selector;
+    bytes4 selector = L2SequencerUptimeFeedInterface.updateStatus.selector;
     bool status = currentAnswer == ANSWER_SEQ_OFFLINE;
     uint64 timestamp = uint64(block.timestamp);
     // Encode `status` and `timestamp`

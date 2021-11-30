@@ -1,5 +1,9 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
 import {IInbox} from "../dev/vendor/arb-bridge-eth/v0.8.0-custom/contracts/bridge/interfaces/IInbox.sol";
 import {IBridge} from "../dev/vendor/arb-bridge-eth/v0.8.0-custom/contracts/bridge/interfaces/IBridge.sol";
+import {AddressAliasHelper} from "../dev/vendor/arb-bridge-eth/v0.8.0-custom/contracts/libraries/AddressAliasHelper.sol";
 
 contract MockArbitrumInbox is IInbox {
   event RetryableTicketNoRefundAliasRewriteCreated(
@@ -108,5 +112,15 @@ contract MockArbitrumInbox is IInbox {
 
   function bridge() external view override returns (IBridge) {
     return IBridge(address(0));
+  }
+
+  /// @dev Convert an *aliased L2* address back into the original L1 address
+  function undoL1ToL2Alias(address l2Address) external pure returns (address) {
+    return AddressAliasHelper.undoL1ToL2Alias(l2Address);
+  }
+
+  /// @dev Convert an L1 address into its *aliased L2*
+  function applyL1ToL2Alias(address l1Address) external pure returns (address) {
+    return AddressAliasHelper.applyL1ToL2Alias(l1Address);
   }
 }
