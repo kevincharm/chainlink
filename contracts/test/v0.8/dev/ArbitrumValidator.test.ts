@@ -80,9 +80,11 @@ describe('ArbitrumValidator', () => {
       value: ethers.utils.parseEther('1.0'),
     })
     arbitrumValidatorL2Address = ethers.utils.getAddress(
-      BigNumber.from(arbitrumValidator.address)
-        .add('0x1111000000000000000000000000000000001111')
-        .toHexString(),
+      ethers.utils.hexValue(
+        BigNumber.from(arbitrumValidator.address).add(
+          '0x1111000000000000000000000000000000001111',
+        ),
+      ),
     )
   })
 
