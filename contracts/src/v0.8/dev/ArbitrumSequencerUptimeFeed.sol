@@ -8,19 +8,19 @@ import {AggregatorV3Interface} from "../interfaces/AggregatorV3Interface.sol";
 import {AggregatorV2V3Interface} from "../interfaces/AggregatorV2V3Interface.sol";
 import {TypeAndVersionInterface} from "../interfaces/TypeAndVersionInterface.sol";
 import {FlagsInterface} from "./interfaces/FlagsInterface.sol";
-import {ArbitrumSequencerStatusRecorderInterface} from "./interfaces/ArbitrumSequencerStatusRecorderInterface.sol";
+import {ArbitrumSequencerUptimeFeedInterface} from "./interfaces/ArbitrumSequencerUptimeFeedInterface.sol";
 import {SimpleReadAccessController} from "../SimpleReadAccessController.sol";
 import {ConfirmedOwner} from "../ConfirmedOwner.sol";
 
 /**
- * @title ArbitrumSequencerStatusRecorder - L2 status history aggregator
+ * @title ArbitrumSequencerUptimeFeed - L2 sequencer uptime status aggregator
  * @notice L2 contract that receives status updates from a specific L1 address,
  *  records a new answer if the status changed, and raises or lowers the flag on the
  *   stored Flags contract.
  */
-contract ArbitrumSequencerStatusRecorder is
+contract ArbitrumSequencerUptimeFeed is
   AggregatorV2V3Interface,
-  ArbitrumSequencerStatusRecorderInterface,
+  ArbitrumSequencerUptimeFeedInterface,
   TypeAndVersionInterface,
   SimpleReadAccessController
 {
@@ -34,11 +34,11 @@ contract ArbitrumSequencerStatusRecorder is
 
   string private constant V3_NO_DATA_ERROR = "No data present";
   /// @dev Follows: https://eips.ethereum.org/EIPS/eip-1967
-  address public constant FLAG_ARBITRUM_SEQ_OFFLINE =
-    address(bytes20(bytes32(uint256(keccak256("chainlink.flags.arbitrum-seq-offline")) - 1)));
+  address public constant FLAG_L2_SEQ_OFFLINE =
+    address(bytes20(bytes32(uint256(keccak256("chainlink.flags.l2-seq-offline")) - 1)));
 
   uint8 public constant override decimals = 0;
-  string public constant override description = "L2 Status History";
+  string public constant override description = "L2 Sequencer Uptime Status Feed";
   uint256 public constant override version = 1;
 
   /// @dev Flags contract to raise/lower flags on, during status transitions
@@ -65,7 +65,7 @@ contract ArbitrumSequencerStatusRecorder is
     require(latestRoundId == 0, "Already initialised");
 
     uint64 timestamp = uint64(block.timestamp);
-    bool currentStatus = FLAGS.getFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
+    bool currentStatus = FLAGS.getFlag(FLAG_L2_SEQ_OFFLINE);
     Round memory initialRound = Round(currentStatus, timestamp);
     // Initialise roundId == 1 as the first round
     latestRoundId = 1;
@@ -85,7 +85,7 @@ contract ArbitrumSequencerStatusRecorder is
    * @inheritdoc TypeAndVersionInterface
    */
   function typeAndVersion() external pure virtual override returns (string memory) {
-    return "ArbitrumSequencerStatusRecorder 1.0.0";
+    return "ArbitrumSequencerUptimeFeed 1.0.0";
   }
 
   /// @return L1 owner address
@@ -130,9 +130,9 @@ contract ArbitrumSequencerStatusRecorder is
    */
   function forwardStatusToFlags(bool status) private {
     if (status) {
-      FLAGS.raiseFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
+      FLAGS.raiseFlag(FLAG_L2_SEQ_OFFLINE);
     } else {
-      FLAGS.lowerFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
+      FLAGS.lowerFlag(FLAG_L2_SEQ_OFFLINE);
     }
   }
 
@@ -141,7 +141,7 @@ contract ArbitrumSequencerStatusRecorder is
    */
   function updateStatus(bool status, uint64 timestamp) external override {
     uint80 latestRoundId = s_latestRoundId;
-    require(latestRoundId > 0, "ArbitrumSequencerStatusRecorder has not been initialized");
+    require(latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
     require(msg.sender == crossDomainMessenger(), "Sender is not the L2 messenger");
 
     // Ignore if status did not change
@@ -164,28 +164,28 @@ contract ArbitrumSequencerStatusRecorder is
   /// @inheritdoc AggregatorInterface
   function latestAnswer() external view override checkAccess returns (int256) {
     uint80 latestRoundId = s_latestRoundId;
-    require(latestRoundId > 0, "ArbitrumSequencerStatusRecorder has not been initialized");
+    require(latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
     return getStatusAnswer(s_rounds[latestRoundId].status);
   }
 
   /// @inheritdoc AggregatorInterface
   function latestTimestamp() external view override checkAccess returns (uint256) {
     uint80 latestRoundId = s_latestRoundId;
-    require(latestRoundId > 0, "ArbitrumSequencerStatusRecorder has not been initialized");
+    require(latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
     return s_rounds[latestRoundId].timestamp;
   }
 
   /// @inheritdoc AggregatorInterface
   function latestRound() external view override checkAccess returns (uint256) {
     uint80 latestRoundId = s_latestRoundId;
-    require(latestRoundId > 0, "ArbitrumSequencerStatusRecorder has not been initialized");
+    require(latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
     return latestRoundId;
   }
 
   /// @inheritdoc AggregatorInterface
   function getAnswer(uint256 roundId) external view override checkAccess returns (int256) {
     uint80 latestRoundId = s_latestRoundId;
-    require(latestRoundId > 0, "ArbitrumSequencerStatusRecorder has not been initialized");
+    require(latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
     if (roundId > 0 && roundId <= type(uint80).max && latestRoundId >= roundId) {
       return getStatusAnswer(s_rounds[uint80(roundId)].status);
     }
@@ -196,7 +196,7 @@ contract ArbitrumSequencerStatusRecorder is
   /// @inheritdoc AggregatorInterface
   function getTimestamp(uint256 roundId) external view override checkAccess returns (uint256) {
     uint80 latestRoundId = s_latestRoundId;
-    require(latestRoundId > 0, "ArbitrumSequencerStatusRecorder has not been initialized");
+    require(latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
     if (roundId > 0 && roundId <= type(uint80).max && latestRoundId >= roundId) {
       return s_rounds[uint80(roundId)].timestamp;
     }

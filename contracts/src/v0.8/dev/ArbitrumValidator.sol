@@ -8,7 +8,7 @@ import "../interfaces/AggregatorV3Interface.sol";
 import "../SimpleWriteAccessController.sol";
 
 /* ./dev dependencies - to be moved from ./dev after audit */
-import "./interfaces/ArbitrumSequencerStatusRecorderInterface.sol";
+import "./interfaces/ArbitrumSequencerUptimeFeedInterface.sol";
 import "./interfaces/FlagsInterface.sol";
 import "./vendor/arb-bridge-eth/v0.8.0-custom/contracts/bridge/interfaces/IInbox.sol";
 import "./vendor/arb-bridge-eth/v0.8.0-custom/contracts/libraries/AddressAliasHelper.sol";
@@ -78,7 +78,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
 
   /**
    * @param crossDomainMessengerAddr address the xDomain bridge messenger (Arbitrum Inbox L1) contract address
-   * @param l2ArbitrumSequencerStatusRecorderAddr the L2 Flags contract address
+   * @param l2ArbitrumSequencerUptimeFeedAddr the L2 Flags contract address
    * @param configACAddr address of the access controller for managing gas price on Arbitrum
    * @param maxGas gas limit for immediate L2 execution attempt. A value around 1M should be sufficient
    * @param gasPriceBid maximum L2 gas price to pay
@@ -87,7 +87,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
    */
   constructor(
     address crossDomainMessengerAddr,
-    address l2ArbitrumSequencerStatusRecorderAddr,
+    address l2ArbitrumSequencerUptimeFeedAddr,
     address configACAddr,
     uint256 maxGas,
     uint256 gasPriceBid,
@@ -95,12 +95,9 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
     PaymentStrategy paymentStrategy
   ) {
     require(crossDomainMessengerAddr != address(0), "Invalid xDomain Messenger address");
-    require(
-      l2ArbitrumSequencerStatusRecorderAddr != address(0),
-      "Invalid ArbitrumSequencerStatusRecorder contract address"
-    );
+    require(l2ArbitrumSequencerUptimeFeedAddr != address(0), "Invalid ArbitrumSequencerUptimeFeed contract address");
     CROSS_DOMAIN_MESSENGER = crossDomainMessengerAddr;
-    L2_SEQ_STATUS_RECORDER = l2ArbitrumSequencerStatusRecorderAddr;
+    L2_SEQ_STATUS_RECORDER = l2ArbitrumSequencerUptimeFeedAddr;
     // Additional L2 payment configuration
     _setConfigAC(configACAddr);
     _setGasConfig(maxGas, gasPriceBid, gasPriceL1FeedAddr);
@@ -116,7 +113,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
    *   - new `withdrawFundsFromL2` fn that withdraws from L2 xDomain alias address
    *   - approximation of `maxSubmissionCost` using a L1 gas price feed
    * - ArbitrumValidator 0.3.0: change target of L2 sequencer status update
-   *   - now calls `updateStatus` on an L2 ArbitrumSequencerStatusRecorder contract instead of
+   *   - now calls `updateStatus` on an L2 ArbitrumSequencerUptimeFeed contract instead of
    *     directly calling the Flags contract
    *
    * @inheritdoc TypeAndVersionInterface
@@ -255,8 +252,8 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
 
     // Excess gas on L2 will be sent to the L2 xDomain alias address of this contract
     address refundAddr = L2_ALIAS;
-    // Encode the ArbitrumSequencerStatusRecorder call
-    bytes4 selector = ArbitrumSequencerStatusRecorderInterface.updateStatus.selector;
+    // Encode the ArbitrumSequencerUptimeFeed call
+    bytes4 selector = ArbitrumSequencerUptimeFeedInterface.updateStatus.selector;
     bool status = currentAnswer == ANSWER_SEQ_OFFLINE;
     uint64 timestamp = uint64(block.timestamp);
     // Encode `status` and `timestamp`
