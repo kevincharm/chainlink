@@ -30,7 +30,7 @@ contract ArbitrumSequencerUptimeFeed is
   }
 
   event Initialized();
-  event L1OwnershipTransferred(address indexed from, address indexed to);
+  event L1SenderTransferred(address indexed from, address indexed to);
 
   string private constant V3_NO_DATA_ERROR = "No data present";
   /// @dev Follows: https://eips.ethereum.org/EIPS/eip-1967
@@ -102,12 +102,12 @@ contract ArbitrumSequencerUptimeFeed is
     setL1Sender(to);
   }
 
-  /// @notice internal method that stores the L1 owner
+  /// @notice internal method that stores the L1 sender
   function setL1Sender(address to) private {
     address from = s_l1Sender;
     if (from != to) {
       s_l1Sender = to;
-      emit L1OwnershipTransferred(from, to);
+      emit L1SenderTransferred(from, to);
     }
   }
 
