@@ -9,7 +9,7 @@ describe('ArbitrumSequencerStatusRecorder', () => {
   let flags: Contract
   let arbitrumSequencerStatusRecorder: Contract
   let accessController: Contract
-  let arbitrumSequencerStatusRecorderConsumer: Contract
+  let statusFeedConsumer: Contract
   let deployer: SignerWithAddress
   let l1Owner: SignerWithAddress
   let l2Messenger: SignerWithAddress
@@ -77,15 +77,13 @@ describe('ArbitrumSequencerStatusRecorder', () => {
     await expect(initTx).to.emit(arbitrumSequencerStatusRecorder, 'Initialized')
 
     // Mock consumer
-    const arbitrumSequencerStatusRecorderConsumerFactory =
-      await ethers.getContractFactory(
-        'src/v0.8/tests/ArbitrumSequencerStatusRecorderConsumer.sol:ArbitrumSequencerStatusRecorderConsumer',
-        deployer,
-      )
-    arbitrumSequencerStatusRecorderConsumer =
-      await arbitrumSequencerStatusRecorderConsumerFactory.deploy(
-        arbitrumSequencerStatusRecorder.address,
-      )
+    const statusFeedConsumerFactory = await ethers.getContractFactory(
+      'src/v0.8/tests/FeedConsumer.sol:FeedConsumer',
+      deployer,
+    )
+    statusFeedConsumer = await statusFeedConsumerFactory.deploy(
+      arbitrumSequencerStatusRecorder.address,
+    )
   })
 
   describe('#updateStatus', () => {
@@ -192,40 +190,37 @@ describe('ArbitrumSequencerStatusRecorder', () => {
       expect(await arbitrumSequencerStatusRecorder.checkEnabled()).to.be.true
       expect(
         await arbitrumSequencerStatusRecorder.hasAccess(
-          arbitrumSequencerStatusRecorderConsumer.address,
+          statusFeedConsumer.address,
           '0x00',
         ),
       ).to.be.false
 
       // Assert reads are not possible from consuming contract
-      await expect(
-        arbitrumSequencerStatusRecorderConsumer.getAggregatorV2Answer(),
-      ).to.be.revertedWith('No access')
-      await expect(
-        arbitrumSequencerStatusRecorderConsumer.getAggregatorV3Answer(),
-      ).to.be.revertedWith('No access')
+      await expect(statusFeedConsumer.latestAnswer()).to.be.revertedWith(
+        'No access',
+      )
+      await expect(statusFeedConsumer.latestRoundData()).to.be.revertedWith(
+        'No access',
+      )
     })
 
     it('should allow reads on AggregatorV2V3Interface functions when consuming contract is whitelisted', async () => {
       // Whitelist consumer
       await arbitrumSequencerStatusRecorder.addAccess(
-        arbitrumSequencerStatusRecorderConsumer.address,
+        statusFeedConsumer.address,
       )
       // Sanity - consumer is whitelisted
       expect(await arbitrumSequencerStatusRecorder.checkEnabled()).to.be.true
       expect(
         await arbitrumSequencerStatusRecorder.hasAccess(
-          arbitrumSequencerStatusRecorderConsumer.address,
+          statusFeedConsumer.address,
           '0x00',
         ),
       ).to.be.true
 
       // Assert reads are possible from consuming contract
-      expect(
-        await arbitrumSequencerStatusRecorderConsumer.getAggregatorV2Answer(),
-      ).to.be.equal('0')
-      const [roundId, answer] =
-        await arbitrumSequencerStatusRecorderConsumer.getAggregatorV3Answer()
+      expect(await statusFeedConsumer.latestAnswer()).to.be.equal('0')
+      const [roundId, answer] = await statusFeedConsumer.latestRoundData()
       expect(roundId).to.equal(0)
       expect(answer).to.equal(0)
     })
