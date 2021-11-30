@@ -122,7 +122,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
    * @inheritdoc TypeAndVersionInterface
    */
   function typeAndVersion() external pure virtual override returns (string memory) {
-    return "ArbitrumValidator 0.3.0";
+    return "ArbitrumValidator 1.0.0";
   }
 
   /// @return stored PaymentStrategy
