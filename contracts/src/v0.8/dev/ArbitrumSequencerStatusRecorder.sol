@@ -128,7 +128,7 @@ contract ArbitrumSequencerStatusRecorder is
   /**
    * @notice Raise or lower the flag on the stored Flags contract.
    */
-  function forwardStatusToFlags(bool status) internal {
+  function forwardStatusToFlags(bool status) private {
     if (status) {
       FLAGS.raiseFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
     } else {
