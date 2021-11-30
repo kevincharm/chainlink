@@ -59,8 +59,8 @@ contract ArbitrumSequencerStatusRecorder is
 
   /**
    * @notice Initialise the first round. Can't be done in the constructor,
-   *    because this contract's address must be set as the controller in
-   *    the Flags contract.
+   *    because this contract's address must be permissioned by the the Flags contract
+   *    (The Flags contract itself is a SimpleReadAccessController).
    */
   function initialize() external onlyOwner {
     require(!s_initialized, "Already initialised");
