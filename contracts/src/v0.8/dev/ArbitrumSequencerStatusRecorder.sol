@@ -45,9 +45,7 @@ contract ArbitrumSequencerStatusRecorder is
   FlagsInterface public immutable FLAGS;
   /// @dev L1 address
   address private s_l1Owner;
-  /// @dev Contract initialization flag
-  bool public s_initialized = false;
-
+  /// @dev s_latestRoundId == 0 means this contract is uninitialized.
   uint80 private s_latestRoundId = 0;
   mapping(uint80 => Round) private s_rounds;
 
@@ -63,16 +61,19 @@ contract ArbitrumSequencerStatusRecorder is
    *    (The Flags contract itself is a SimpleReadAccessController).
    */
   function initialize() external onlyOwner {
-    require(!s_initialized, "Already initialised");
+    uint80 latestRoundId = s_latestRoundId;
+    require(latestRoundId == 0, "Already initialised");
 
     uint64 timestamp = uint64(block.timestamp);
     bool currentStatus = FLAGS.getFlag(FLAG_ARBITRUM_SEQ_OFFLINE);
     Round memory initialRound = Round(currentStatus, timestamp);
-    s_rounds[0] = initialRound;
+    // Initialise roundId == 1 as the first round
+    latestRoundId = 1;
+    s_rounds[latestRoundId] = initialRound;
+    s_latestRoundId = latestRoundId;
 
-    s_initialized = true;
     emit Initialized();
-    emit NewRound(0, msg.sender, timestamp);
+    emit NewRound(latestRoundId, msg.sender, timestamp);
     emit AnswerUpdated(getStatusAnswer(initialRound.status), 0, timestamp);
   }
 
@@ -139,10 +140,9 @@ contract ArbitrumSequencerStatusRecorder is
    * @notice Record a new status and timestamp if it has changed since the last round.
    */
   function updateStatus(bool status, uint64 timestamp) external override {
-    require(s_initialized, "ArbitrumSequencerStatusRecorder has not been initialized");
-    require(msg.sender == crossDomainMessenger(), "Sender is not the L2 messenger");
-
     uint80 latestRoundId = s_latestRoundId;
+    require(latestRoundId > 0, "ArbitrumSequencerStatusRecorder has not been initialized");
+    require(msg.sender == crossDomainMessenger(), "Sender is not the L2 messenger");
 
     // Ignore if status did not change
     if (status == s_rounds[latestRoundId].status) {
@@ -163,30 +163,30 @@ contract ArbitrumSequencerStatusRecorder is
 
   /// @inheritdoc AggregatorInterface
   function latestAnswer() external view override checkAccess returns (int256) {
-    if (s_initialized) {
-      return getStatusAnswer(s_rounds[s_latestRoundId].status);
-    }
-
-    return 0;
+    uint80 latestRoundId = s_latestRoundId;
+    require(latestRoundId > 0, "ArbitrumSequencerStatusRecorder has not been initialized");
+    return getStatusAnswer(s_rounds[latestRoundId].status);
   }
 
   /// @inheritdoc AggregatorInterface
   function latestTimestamp() external view override checkAccess returns (uint256) {
-    if (s_initialized) {
-      return s_rounds[s_latestRoundId].timestamp;
-    }
-
-    return 0;
+    uint80 latestRoundId = s_latestRoundId;
+    require(latestRoundId > 0, "ArbitrumSequencerStatusRecorder has not been initialized");
+    return s_rounds[latestRoundId].timestamp;
   }
 
   /// @inheritdoc AggregatorInterface
   function latestRound() external view override checkAccess returns (uint256) {
-    return s_latestRoundId;
+    uint80 latestRoundId = s_latestRoundId;
+    require(latestRoundId > 0, "ArbitrumSequencerStatusRecorder has not been initialized");
+    return latestRoundId;
   }
 
   /// @inheritdoc AggregatorInterface
   function getAnswer(uint256 roundId) external view override checkAccess returns (int256) {
-    if (s_initialized && roundId <= type(uint80).max && s_latestRoundId >= roundId) {
+    uint80 latestRoundId = s_latestRoundId;
+    require(latestRoundId > 0, "ArbitrumSequencerStatusRecorder has not been initialized");
+    if (roundId > 0 && roundId <= type(uint80).max && latestRoundId >= roundId) {
       return getStatusAnswer(s_rounds[uint80(roundId)].status);
     }
 
@@ -195,7 +195,9 @@ contract ArbitrumSequencerStatusRecorder is
 
   /// @inheritdoc AggregatorInterface
   function getTimestamp(uint256 roundId) external view override checkAccess returns (uint256) {
-    if (s_initialized && roundId <= type(uint80).max && s_latestRoundId >= roundId) {
+    uint80 latestRoundId = s_latestRoundId;
+    require(latestRoundId > 0, "ArbitrumSequencerStatusRecorder has not been initialized");
+    if (roundId > 0 && roundId <= type(uint80).max && latestRoundId >= roundId) {
       return s_rounds[uint80(roundId)].timestamp;
     }
 
@@ -216,7 +218,8 @@ contract ArbitrumSequencerStatusRecorder is
       uint80 answeredInRound
     )
   {
-    require(s_initialized && s_latestRoundId >= _roundId, "No data present");
+    uint80 latestRoundId = s_latestRoundId;
+    require(_roundId > 0 && latestRoundId > 0 && latestRoundId >= _roundId, "No data present");
 
     Round memory r = s_rounds[_roundId];
     roundId = _roundId;

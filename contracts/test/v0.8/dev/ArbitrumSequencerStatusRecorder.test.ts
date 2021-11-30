@@ -94,7 +94,7 @@ describe('ArbitrumSequencerStatusRecorder', () => {
         .updateStatus(true, timestamp)
       await expect(tx)
         .to.emit(arbitrumSequencerStatusRecorder, 'AnswerUpdated')
-        .withArgs(1, 1 /** roundId */, timestamp)
+        .withArgs(1, 2 /** roundId */, timestamp)
       expect(await arbitrumSequencerStatusRecorder.latestAnswer()).to.equal(1)
 
       // Submit another status update, same status, should ignore
@@ -118,7 +118,7 @@ describe('ArbitrumSequencerStatusRecorder', () => {
         .updateStatus(false, timestamp)
       await expect(tx)
         .to.emit(arbitrumSequencerStatusRecorder, 'AnswerUpdated')
-        .withArgs(0, 2 /** roundId */, timestamp)
+        .withArgs(0, 3 /** roundId */, timestamp)
       expect(await arbitrumSequencerStatusRecorder.latestAnswer()).to.equal(0)
       expect(await arbitrumSequencerStatusRecorder.latestTimestamp()).to.equal(
         timestamp,
@@ -136,7 +136,7 @@ describe('ArbitrumSequencerStatusRecorder', () => {
       const noUpdateTx = await _noUpdateTx.wait(1)
       // Assert no update
       expect(await arbitrumSequencerStatusRecorder.latestAnswer()).to.equal(0)
-      expect(noUpdateTx.cumulativeGasUsed).to.equal(26436)
+      expect(noUpdateTx.cumulativeGasUsed).to.equal(26328)
 
       // Gas for update
       const _updateTx = await arbitrumSequencerStatusRecorder
@@ -145,15 +145,15 @@ describe('ArbitrumSequencerStatusRecorder', () => {
       const updateTx = await _updateTx.wait(1)
       // Assert update
       expect(await arbitrumSequencerStatusRecorder.latestAnswer()).to.equal(1)
-      expect(updateTx.cumulativeGasUsed).to.equal(92939)
+      expect(updateTx.cumulativeGasUsed).to.equal(92832)
     })
   })
 
   describe('AggregatorV3Interface', () => {
     it('should return valid answer from getRoundData and latestRoundData', async () => {
       let [roundId, answer, startedAt, updatedAt, answeredInRound] =
-        await arbitrumSequencerStatusRecorder.getRoundData(0)
-      expect(roundId).to.equal(0)
+        await arbitrumSequencerStatusRecorder.getRoundData(1)
+      expect(roundId).to.equal(1)
       expect(answer).to.equal(0)
       expect(answeredInRound).to.equal(roundId)
       expect(startedAt).to.equal(updatedAt)
@@ -164,8 +164,8 @@ describe('ArbitrumSequencerStatusRecorder', () => {
         .connect(l2Messenger)
         .updateStatus(true, timestamp)
       ;[roundId, answer, startedAt, updatedAt, answeredInRound] =
-        await arbitrumSequencerStatusRecorder.getRoundData(1)
-      expect(roundId).to.equal(1)
+        await arbitrumSequencerStatusRecorder.getRoundData(2)
+      expect(roundId).to.equal(2)
       expect(answer).to.equal(1)
       expect(answeredInRound).to.equal(roundId)
       expect(startedAt).to.equal(timestamp)
@@ -173,13 +173,13 @@ describe('ArbitrumSequencerStatusRecorder', () => {
 
       // Assert latestRoundData corresponds to latest round id
       expect(
-        await arbitrumSequencerStatusRecorder.getRoundData(1),
+        await arbitrumSequencerStatusRecorder.getRoundData(2),
       ).to.deep.equal(await arbitrumSequencerStatusRecorder.latestRoundData())
     })
 
     it('should raise from #getRoundData when round does not exist', async () => {
       await expect(
-        arbitrumSequencerStatusRecorder.getRoundData(1),
+        arbitrumSequencerStatusRecorder.getRoundData(2),
       ).to.be.revertedWith('No data present')
     })
   })
@@ -221,7 +221,7 @@ describe('ArbitrumSequencerStatusRecorder', () => {
       // Assert reads are possible from consuming contract
       expect(await statusFeedConsumer.latestAnswer()).to.be.equal('0')
       const [roundId, answer] = await statusFeedConsumer.latestRoundData()
-      expect(roundId).to.equal(0)
+      expect(roundId).to.equal(1)
       expect(answer).to.equal(0)
     })
   })
