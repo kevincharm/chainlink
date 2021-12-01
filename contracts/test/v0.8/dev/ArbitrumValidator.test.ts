@@ -16,9 +16,7 @@ import { abi as aggregatorAbi } from '../../../artifacts/src/v0.8/interfaces/Agg
 
 const truncateBigNumToAddress = (num: BigNumberish) => {
   // Pad, then slice off '0x' prefix
-  const hexWithoutPrefix = ethers.utils
-    .hexZeroPad(BigNumber.from(num).toHexString(), 20)
-    .slice(2)
+  const hexWithoutPrefix = BigNumber.from(num).toHexString().slice(2)
   // Ethereum address is 20B -> 40 hex chars w/o 0x prefix
   const truncated = hexWithoutPrefix
     .split('')

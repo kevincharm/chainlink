@@ -133,7 +133,7 @@ describe('ArbitrumSequencerUptimeFeed', () => {
       const noUpdateTx = await _noUpdateTx.wait(1)
       // Assert no update
       expect(await arbitrumSequencerUptimeFeed.latestAnswer()).to.equal(0)
-      expect(noUpdateTx.cumulativeGasUsed).to.equal(26328)
+      expect(noUpdateTx.cumulativeGasUsed).to.equal(30504)
 
       // Gas for update
       const _updateTx = await arbitrumSequencerUptimeFeed
@@ -142,7 +142,7 @@ describe('ArbitrumSequencerUptimeFeed', () => {
       const updateTx = await _updateTx.wait(1)
       // Assert update
       expect(await arbitrumSequencerUptimeFeed.latestAnswer()).to.equal(1)
-      expect(updateTx.cumulativeGasUsed).to.equal(92832)
+      expect(updateTx.cumulativeGasUsed).to.equal(142156)
     })
   })
 
@@ -167,6 +167,14 @@ describe('ArbitrumSequencerUptimeFeed', () => {
       expect(answeredInRound).to.equal(roundId)
       expect(startedAt).to.equal(timestamp)
       expect(updatedAt).to.equal(startedAt)
+
+      // Check that last round is still returning the correct data
+      ;[roundId, answer, startedAt, updatedAt, answeredInRound] =
+        await arbitrumSequencerUptimeFeed.getRoundData(1)
+      expect(roundId).to.equal(1)
+      expect(answer).to.equal(0)
+      expect(answeredInRound).to.equal(roundId)
+      expect(startedAt).to.equal(updatedAt)
 
       // Assert latestRoundData corresponds to latest round id
       expect(await arbitrumSequencerUptimeFeed.getRoundData(2)).to.deep.equal(
