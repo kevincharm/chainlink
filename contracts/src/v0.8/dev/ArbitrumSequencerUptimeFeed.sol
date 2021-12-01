@@ -182,7 +182,7 @@ contract ArbitrumSequencerUptimeFeed is
   function latestAnswer() external view override checkAccess returns (int256) {
     FeedState memory feedState = s_feedState;
     require(feedState.latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
-    return s_rounds[feedState.latestRoundId].answer;
+    return feedState.latestAnswer;
   }
 
   /// @inheritdoc AggregatorInterface

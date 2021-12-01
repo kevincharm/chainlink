@@ -154,10 +154,10 @@ describe('ArbitrumSequencerUptimeFeed', () => {
       const _tx = await l2Messenger.sendTransaction(
         await arbitrumSequencerUptimeFeed
           .connect(l2Messenger)
-          .populateTransaction.latestRoundData(),
+          .populateTransaction.getRoundData(1),
       )
       const tx = await _tx.wait(1)
-      expect(tx.cumulativeGasUsed).to.equal(32585)
+      expect(tx.cumulativeGasUsed).to.equal(37234)
     })
 
     it('should consume a known amount of gas for latestRoundData() @skip-coverage', async () => {
@@ -175,7 +175,7 @@ describe('ArbitrumSequencerUptimeFeed', () => {
       expect(tx.cumulativeGasUsed).to.equal(32585)
     })
 
-    it('should consume a known amount of gas for latestRound() @skip-coverage', async () => {
+    it('should consume a known amount of gas for latestAnswer() @skip-coverage', async () => {
       // Initialise a round
       await arbitrumSequencerUptimeFeed
         .connect(l2Messenger)
@@ -184,10 +184,10 @@ describe('ArbitrumSequencerUptimeFeed', () => {
       const _tx = await l2Messenger.sendTransaction(
         await arbitrumSequencerUptimeFeed
           .connect(l2Messenger)
-          .populateTransaction.latestRound(),
+          .populateTransaction.latestAnswer(),
       )
       const tx = await _tx.wait(1)
-      expect(tx.cumulativeGasUsed).to.equal(32373)
+      expect(tx.cumulativeGasUsed).to.equal(32395)
     })
   })
 
