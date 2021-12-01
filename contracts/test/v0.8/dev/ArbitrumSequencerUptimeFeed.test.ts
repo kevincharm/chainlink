@@ -122,7 +122,7 @@ describe('ArbitrumSequencerUptimeFeed', () => {
       )
     })
 
-    it('should consume a known amount of gas @skip-coverage', async () => {
+    it('should consume a known amount of gas for updates @skip-coverage', async () => {
       // Sanity - start at flag = 0 (`false`)
       expect(await arbitrumSequencerUptimeFeed.latestAnswer()).to.equal(0)
 
@@ -143,6 +143,51 @@ describe('ArbitrumSequencerUptimeFeed', () => {
       // Assert update
       expect(await arbitrumSequencerUptimeFeed.latestAnswer()).to.equal(1)
       expect(updateTx.cumulativeGasUsed).to.equal(142156)
+    })
+
+    it('should consume a known amount of gas for getRoundData(uint80) @skip-coverage', async () => {
+      // Initialise a round
+      await arbitrumSequencerUptimeFeed
+        .connect(l2Messenger)
+        .updateStatus(true, now())
+
+      const _tx = await l2Messenger.sendTransaction(
+        await arbitrumSequencerUptimeFeed
+          .connect(l2Messenger)
+          .populateTransaction.latestRoundData(),
+      )
+      const tx = await _tx.wait(1)
+      expect(tx.cumulativeGasUsed).to.equal(32585)
+    })
+
+    it('should consume a known amount of gas for latestRoundData() @skip-coverage', async () => {
+      // Initialise a round
+      await arbitrumSequencerUptimeFeed
+        .connect(l2Messenger)
+        .updateStatus(true, now())
+
+      const _tx = await l2Messenger.sendTransaction(
+        await arbitrumSequencerUptimeFeed
+          .connect(l2Messenger)
+          .populateTransaction.latestRoundData(),
+      )
+      const tx = await _tx.wait(1)
+      expect(tx.cumulativeGasUsed).to.equal(32585)
+    })
+
+    it('should consume a known amount of gas for latestRound() @skip-coverage', async () => {
+      // Initialise a round
+      await arbitrumSequencerUptimeFeed
+        .connect(l2Messenger)
+        .updateStatus(true, now())
+
+      const _tx = await l2Messenger.sendTransaction(
+        await arbitrumSequencerUptimeFeed
+          .connect(l2Messenger)
+          .populateTransaction.latestRound(),
+      )
+      const tx = await _tx.wait(1)
+      expect(tx.cumulativeGasUsed).to.equal(32373)
     })
   })
 
