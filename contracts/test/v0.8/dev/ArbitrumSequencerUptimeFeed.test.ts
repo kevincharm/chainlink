@@ -121,74 +121,6 @@ describe('ArbitrumSequencerUptimeFeed', () => {
         timestamp,
       )
     })
-
-    it('should consume a known amount of gas for updates @skip-coverage', async () => {
-      // Sanity - start at flag = 0 (`false`)
-      expect(await arbitrumSequencerUptimeFeed.latestAnswer()).to.equal(0)
-
-      // Gas for no update
-      const _noUpdateTx = await arbitrumSequencerUptimeFeed
-        .connect(l2Messenger)
-        .updateStatus(false, now())
-      const noUpdateTx = await _noUpdateTx.wait(1)
-      // Assert no update
-      expect(await arbitrumSequencerUptimeFeed.latestAnswer()).to.equal(0)
-      expect(noUpdateTx.cumulativeGasUsed).to.equal(30504)
-
-      // Gas for update
-      const _updateTx = await arbitrumSequencerUptimeFeed
-        .connect(l2Messenger)
-        .updateStatus(true, now())
-      const updateTx = await _updateTx.wait(1)
-      // Assert update
-      expect(await arbitrumSequencerUptimeFeed.latestAnswer()).to.equal(1)
-      expect(updateTx.cumulativeGasUsed).to.equal(142156)
-    })
-
-    it('should consume a known amount of gas for getRoundData(uint80) @skip-coverage', async () => {
-      // Initialise a round
-      await arbitrumSequencerUptimeFeed
-        .connect(l2Messenger)
-        .updateStatus(true, now())
-
-      const _tx = await l2Messenger.sendTransaction(
-        await arbitrumSequencerUptimeFeed
-          .connect(l2Messenger)
-          .populateTransaction.getRoundData(1),
-      )
-      const tx = await _tx.wait(1)
-      expect(tx.cumulativeGasUsed).to.equal(32963)
-    })
-
-    it('should consume a known amount of gas for latestRoundData() @skip-coverage', async () => {
-      // Initialise a round
-      await arbitrumSequencerUptimeFeed
-        .connect(l2Messenger)
-        .updateStatus(true, now())
-
-      const _tx = await l2Messenger.sendTransaction(
-        await arbitrumSequencerUptimeFeed
-          .connect(l2Messenger)
-          .populateTransaction.latestRoundData(),
-      )
-      const tx = await _tx.wait(1)
-      expect(tx.cumulativeGasUsed).to.equal(32598)
-    })
-
-    it('should consume a known amount of gas for latestAnswer() @skip-coverage', async () => {
-      // Initialise a round
-      await arbitrumSequencerUptimeFeed
-        .connect(l2Messenger)
-        .updateStatus(true, now())
-
-      const _tx = await l2Messenger.sendTransaction(
-        await arbitrumSequencerUptimeFeed
-          .connect(l2Messenger)
-          .populateTransaction.latestAnswer(),
-      )
-      const tx = await _tx.wait(1)
-      expect(tx.cumulativeGasUsed).to.equal(30205)
-    })
   })
 
   describe('AggregatorV3Interface', () => {
@@ -271,6 +203,76 @@ describe('ArbitrumSequencerUptimeFeed', () => {
       const [roundId, answer] = await uptimeFeedConsumer.latestRoundData()
       expect(roundId).to.equal(1)
       expect(answer).to.equal(0)
+    })
+  })
+
+  describe('Gas costs', () => {
+    it('should consume a known amount of gas for updates @skip-coverage', async () => {
+      // Sanity - start at flag = 0 (`false`)
+      expect(await arbitrumSequencerUptimeFeed.latestAnswer()).to.equal(0)
+
+      // Gas for no update
+      const _noUpdateTx = await arbitrumSequencerUptimeFeed
+        .connect(l2Messenger)
+        .updateStatus(false, now())
+      const noUpdateTx = await _noUpdateTx.wait(1)
+      // Assert no update
+      expect(await arbitrumSequencerUptimeFeed.latestAnswer()).to.equal(0)
+      expect(noUpdateTx.cumulativeGasUsed).to.equal(30504)
+
+      // Gas for update
+      const _updateTx = await arbitrumSequencerUptimeFeed
+        .connect(l2Messenger)
+        .updateStatus(true, now())
+      const updateTx = await _updateTx.wait(1)
+      // Assert update
+      expect(await arbitrumSequencerUptimeFeed.latestAnswer()).to.equal(1)
+      expect(updateTx.cumulativeGasUsed).to.equal(142156)
+    })
+
+    it('should consume a known amount of gas for getRoundData(uint80) @skip-coverage', async () => {
+      // Initialise a round
+      await arbitrumSequencerUptimeFeed
+        .connect(l2Messenger)
+        .updateStatus(true, now())
+
+      const _tx = await l2Messenger.sendTransaction(
+        await arbitrumSequencerUptimeFeed
+          .connect(l2Messenger)
+          .populateTransaction.getRoundData(1),
+      )
+      const tx = await _tx.wait(1)
+      expect(tx.cumulativeGasUsed).to.equal(32963)
+    })
+
+    it('should consume a known amount of gas for latestRoundData() @skip-coverage', async () => {
+      // Initialise a round
+      await arbitrumSequencerUptimeFeed
+        .connect(l2Messenger)
+        .updateStatus(true, now())
+
+      const _tx = await l2Messenger.sendTransaction(
+        await arbitrumSequencerUptimeFeed
+          .connect(l2Messenger)
+          .populateTransaction.latestRoundData(),
+      )
+      const tx = await _tx.wait(1)
+      expect(tx.cumulativeGasUsed).to.equal(32598)
+    })
+
+    it('should consume a known amount of gas for latestAnswer() @skip-coverage', async () => {
+      // Initialise a round
+      await arbitrumSequencerUptimeFeed
+        .connect(l2Messenger)
+        .updateStatus(true, now())
+
+      const _tx = await l2Messenger.sendTransaction(
+        await arbitrumSequencerUptimeFeed
+          .connect(l2Messenger)
+          .populateTransaction.latestAnswer(),
+      )
+      const tx = await _tx.wait(1)
+      expect(tx.cumulativeGasUsed).to.equal(30205)
     })
   })
 })
