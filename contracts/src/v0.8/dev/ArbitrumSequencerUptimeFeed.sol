@@ -180,28 +180,28 @@ contract ArbitrumSequencerUptimeFeed is
 
   /// @inheritdoc AggregatorInterface
   function latestAnswer() external view override checkAccess returns (int256) {
-    FeedState memory feedState = s_feedState;
+    FeedState storage feedState = s_feedState;
     require(feedState.latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
     return feedState.latestAnswer;
   }
 
   /// @inheritdoc AggregatorInterface
   function latestTimestamp() external view override checkAccess returns (uint256) {
-    FeedState memory feedState = s_feedState;
+    FeedState storage feedState = s_feedState;
     require(feedState.latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
-    return s_rounds[feedState.latestRoundId].timestamp;
+    return feedState.latestTimestamp;
   }
 
   /// @inheritdoc AggregatorInterface
   function latestRound() external view override checkAccess returns (uint256) {
-    FeedState memory feedState = s_feedState;
+    FeedState storage feedState = s_feedState;
     require(feedState.latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
     return feedState.latestRoundId;
   }
 
   /// @inheritdoc AggregatorInterface
   function getAnswer(uint256 roundId) external view override checkAccess returns (int256) {
-    FeedState memory feedState = s_feedState;
+    FeedState storage feedState = s_feedState;
     require(feedState.latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
     if (roundId > 0 && roundId <= type(uint80).max && feedState.latestRoundId >= roundId) {
       return s_rounds[uint80(roundId)].answer;
@@ -212,7 +212,7 @@ contract ArbitrumSequencerUptimeFeed is
 
   /// @inheritdoc AggregatorInterface
   function getTimestamp(uint256 roundId) external view override checkAccess returns (uint256) {
-    FeedState memory feedState = s_feedState;
+    FeedState storage feedState = s_feedState;
     require(feedState.latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
     if (roundId > 0 && roundId <= type(uint80).max && feedState.latestRoundId >= roundId) {
       return s_rounds[uint80(roundId)].timestamp;
@@ -235,10 +235,10 @@ contract ArbitrumSequencerUptimeFeed is
       uint80 answeredInRound
     )
   {
-    FeedState memory feedState = s_feedState;
+    FeedState storage feedState = s_feedState;
     require(_roundId > 0 && feedState.latestRoundId > 0 && feedState.latestRoundId >= _roundId, "No data present");
 
-    Round memory r = s_rounds[_roundId];
+    Round storage r = s_rounds[_roundId];
     roundId = _roundId;
     answer = r.answer;
     startedAt = uint256(r.timestamp);
@@ -260,7 +260,7 @@ contract ArbitrumSequencerUptimeFeed is
       uint80 answeredInRound
     )
   {
-    FeedState memory feedState = s_feedState;
+    FeedState storage feedState = s_feedState;
     require(feedState.latestRoundId > 0, "No data present");
 
     roundId = feedState.latestRoundId;

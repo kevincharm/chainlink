@@ -157,7 +157,7 @@ describe('ArbitrumSequencerUptimeFeed', () => {
           .populateTransaction.getRoundData(1),
       )
       const tx = await _tx.wait(1)
-      expect(tx.cumulativeGasUsed).to.equal(37234)
+      expect(tx.cumulativeGasUsed).to.equal(32963)
     })
 
     it('should consume a known amount of gas for latestRoundData() @skip-coverage', async () => {
@@ -172,7 +172,7 @@ describe('ArbitrumSequencerUptimeFeed', () => {
           .populateTransaction.latestRoundData(),
       )
       const tx = await _tx.wait(1)
-      expect(tx.cumulativeGasUsed).to.equal(32585)
+      expect(tx.cumulativeGasUsed).to.equal(32598)
     })
 
     it('should consume a known amount of gas for latestAnswer() @skip-coverage', async () => {
@@ -187,7 +187,7 @@ describe('ArbitrumSequencerUptimeFeed', () => {
           .populateTransaction.latestAnswer(),
       )
       const tx = await _tx.wait(1)
-      expect(tx.cumulativeGasUsed).to.equal(32395)
+      expect(tx.cumulativeGasUsed).to.equal(30205)
     })
   })
 
