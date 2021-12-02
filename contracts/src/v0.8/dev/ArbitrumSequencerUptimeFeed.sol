@@ -26,14 +26,14 @@ contract ArbitrumSequencerUptimeFeed is
 {
   /// @dev Round info (for uptime history)
   struct Round {
-    int256 answer;
+    bool status;
     uint64 timestamp;
   }
 
   /// @dev Packed state struct to save sloads
   struct FeedState {
     uint80 latestRoundId;
-    int256 latestAnswer;
+    bool latestStatus;
     uint64 latestTimestamp;
   }
 
@@ -54,7 +54,7 @@ contract ArbitrumSequencerUptimeFeed is
   /// @dev L1 address
   address private s_l1Sender;
   /// @dev s_latestRoundId == 0 means this contract is uninitialized.
-  FeedState private s_feedState = FeedState({latestRoundId: 0, latestAnswer: 0, latestTimestamp: 0});
+  FeedState private s_feedState = FeedState({latestRoundId: 0, latestStatus: false, latestTimestamp: 0});
   mapping(uint80 => Round) private s_rounds;
 
   constructor(address flagsAddress, address l1SenderAddress) {
@@ -73,21 +73,21 @@ contract ArbitrumSequencerUptimeFeed is
     require(feedState.latestRoundId == 0, "Already initialised");
 
     uint64 timestamp = uint64(block.timestamp);
-    int256 currentAnswer = getStatusAnswer(FLAGS.getFlag(FLAG_L2_SEQ_OFFLINE));
+    bool currentStatus = FLAGS.getFlag(FLAG_L2_SEQ_OFFLINE);
 
     // Initialise roundId == 1 as the first round
     feedState.latestRoundId += 1;
-    feedState.latestAnswer = currentAnswer;
+    feedState.latestStatus = currentStatus;
     feedState.latestTimestamp = timestamp;
     // Create initial round
-    Round memory initialRound = Round(currentAnswer, timestamp);
+    Round memory initialRound = Round(currentStatus, timestamp);
     s_rounds[feedState.latestRoundId] = initialRound;
     // Update the current feed state
     s_feedState = feedState;
 
     emit Initialized();
     emit NewRound(feedState.latestRoundId, msg.sender, timestamp);
-    emit AnswerUpdated(initialRound.answer, 0, timestamp);
+    emit AnswerUpdated(getStatusAnswer(initialRound.status), 0, timestamp);
   }
 
   /**
@@ -158,53 +158,52 @@ contract ArbitrumSequencerUptimeFeed is
     require(msg.sender == crossDomainMessenger(), "Sender is not the L2 messenger");
 
     // Ignore if status did not change
-    int256 newAnswer = getStatusAnswer(status);
-    if (feedState.latestAnswer == newAnswer) {
+    if (feedState.latestStatus == status) {
       return;
     }
 
     // Prepare a new round with updated status
     feedState.latestRoundId += 1;
-    feedState.latestAnswer = newAnswer;
+    feedState.latestStatus = status;
     feedState.latestTimestamp = timestamp;
-    Round memory nextRound = Round(newAnswer, timestamp);
+    Round memory nextRound = Round(status, timestamp);
     // Set all storage variables
     s_rounds[feedState.latestRoundId] = nextRound;
     s_feedState = feedState;
 
     emit NewRound(feedState.latestRoundId, msg.sender, timestamp);
-    emit AnswerUpdated(nextRound.answer, feedState.latestRoundId, timestamp);
+    emit AnswerUpdated(getStatusAnswer(nextRound.status), feedState.latestRoundId, timestamp);
 
     forwardStatusToFlags(status);
   }
 
   /// @inheritdoc AggregatorInterface
   function latestAnswer() external view override checkAccess returns (int256) {
-    FeedState storage feedState = s_feedState;
+    FeedState memory feedState = s_feedState;
     require(feedState.latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
-    return feedState.latestAnswer;
+    return getStatusAnswer(feedState.latestStatus);
   }
 
   /// @inheritdoc AggregatorInterface
   function latestTimestamp() external view override checkAccess returns (uint256) {
-    FeedState storage feedState = s_feedState;
+    FeedState memory feedState = s_feedState;
     require(feedState.latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
     return feedState.latestTimestamp;
   }
 
   /// @inheritdoc AggregatorInterface
   function latestRound() external view override checkAccess returns (uint256) {
-    FeedState storage feedState = s_feedState;
+    FeedState memory feedState = s_feedState;
     require(feedState.latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
     return feedState.latestRoundId;
   }
 
   /// @inheritdoc AggregatorInterface
   function getAnswer(uint256 roundId) external view override checkAccess returns (int256) {
-    FeedState storage feedState = s_feedState;
+    FeedState memory feedState = s_feedState;
     require(feedState.latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
     if (roundId > 0 && roundId <= type(uint80).max && feedState.latestRoundId >= roundId) {
-      return s_rounds[uint80(roundId)].answer;
+      return getStatusAnswer(s_rounds[uint80(roundId)].status);
     }
 
     return 0;
@@ -212,7 +211,7 @@ contract ArbitrumSequencerUptimeFeed is
 
   /// @inheritdoc AggregatorInterface
   function getTimestamp(uint256 roundId) external view override checkAccess returns (uint256) {
-    FeedState storage feedState = s_feedState;
+    FeedState memory feedState = s_feedState;
     require(feedState.latestRoundId > 0, "ArbitrumSequencerUptimeFeed has not been initialized");
     if (roundId > 0 && roundId <= type(uint80).max && feedState.latestRoundId >= roundId) {
       return s_rounds[uint80(roundId)].timestamp;
@@ -235,13 +234,13 @@ contract ArbitrumSequencerUptimeFeed is
       uint80 answeredInRound
     )
   {
-    FeedState storage feedState = s_feedState;
+    FeedState memory feedState = s_feedState;
     require(_roundId > 0 && feedState.latestRoundId > 0 && feedState.latestRoundId >= _roundId, "No data present");
 
-    Round storage r = s_rounds[_roundId];
+    Round memory round = s_rounds[_roundId];
     roundId = _roundId;
-    answer = r.answer;
-    startedAt = uint256(r.timestamp);
+    answer = getStatusAnswer(round.status);
+    startedAt = uint256(round.timestamp);
     updatedAt = startedAt;
     answeredInRound = _roundId;
   }
@@ -260,11 +259,11 @@ contract ArbitrumSequencerUptimeFeed is
       uint80 answeredInRound
     )
   {
-    FeedState storage feedState = s_feedState;
+    FeedState memory feedState = s_feedState;
     require(feedState.latestRoundId > 0, "No data present");
 
     roundId = feedState.latestRoundId;
-    answer = feedState.latestAnswer;
+    answer = getStatusAnswer(feedState.latestStatus);
     startedAt = feedState.latestTimestamp;
     updatedAt = startedAt;
     answeredInRound = roundId;
