@@ -57,6 +57,10 @@ contract ArbitrumSequencerUptimeFeed is
   FeedState private s_feedState = FeedState({latestRoundId: 0, latestStatus: false, latestTimestamp: 0});
   mapping(uint80 => Round) private s_rounds;
 
+  /**
+   * @param flagsAddress Address of the Flags contract on L2
+   * @param l1SenderAddress Address of the L1 contract that is permissioned to call this contract
+   */
   constructor(address flagsAddress, address l1SenderAddress) {
     setL1Sender(l1SenderAddress);
 
@@ -76,18 +80,9 @@ contract ArbitrumSequencerUptimeFeed is
     bool currentStatus = FLAGS.getFlag(FLAG_L2_SEQ_OFFLINE);
 
     // Initialise roundId == 1 as the first round
-    feedState.latestRoundId += 1;
-    feedState.latestStatus = currentStatus;
-    feedState.latestTimestamp = timestamp;
-    // Create initial round
-    Round memory initialRound = Round(currentStatus, timestamp);
-    s_rounds[feedState.latestRoundId] = initialRound;
-    // Update the current feed state
-    s_feedState = feedState;
+    recordRound(1, currentStatus, timestamp);
 
     emit Initialized();
-    emit NewRound(feedState.latestRoundId, msg.sender, timestamp);
-    emit AnswerUpdated(getStatusAnswer(initialRound.status), 0, timestamp);
   }
 
   /**
@@ -126,9 +121,11 @@ contract ArbitrumSequencerUptimeFeed is
 
   /**
    * @dev Returns an AggregatorV2V3Interface compatible answer from status flag
+   *
+   * @param status The status flag to convert to an aggregator-compatible answer
    */
-  function getStatusAnswer(bool stat) private pure returns (int256) {
-    return stat ? int256(1) : int256(0);
+  function getStatusAnswer(bool status) private pure returns (int256) {
+    return status ? int256(1) : int256(0);
   }
 
   /**
@@ -150,7 +147,33 @@ contract ArbitrumSequencerUptimeFeed is
   }
 
   /**
+   * @notice Helper function to record a round and set the latest feed state.
+   *
+   * @param roundId The round ID to record
+   * @param status Sequencer status
+   * @param timestamp Block timestamp of status update
+   */
+  function recordRound(
+    uint80 roundId,
+    bool status,
+    uint64 timestamp
+  ) private {
+    Round memory nextRound = Round(status, timestamp);
+    FeedState memory feedState = FeedState(roundId, status, timestamp);
+
+    s_rounds[roundId] = nextRound;
+    s_feedState = feedState;
+
+    emit NewRound(roundId, msg.sender, timestamp);
+    emit AnswerUpdated(getStatusAnswer(status), roundId, timestamp);
+  }
+
+  /**
    * @notice Record a new status and timestamp if it has changed since the last round.
+   * @dev This function will revert if not called from `l1Sender` via the L1->L2 messenger.
+   *
+   * @param status Sequencer status
+   * @param timestamp Block timestamp of status update
    */
   function updateStatus(bool status, uint64 timestamp) external override {
     FeedState memory feedState = s_feedState;
@@ -164,15 +187,7 @@ contract ArbitrumSequencerUptimeFeed is
 
     // Prepare a new round with updated status
     feedState.latestRoundId += 1;
-    feedState.latestStatus = status;
-    feedState.latestTimestamp = timestamp;
-    Round memory nextRound = Round(status, timestamp);
-    // Set all storage variables
-    s_rounds[feedState.latestRoundId] = nextRound;
-    s_feedState = feedState;
-
-    emit NewRound(feedState.latestRoundId, msg.sender, timestamp);
-    emit AnswerUpdated(getStatusAnswer(nextRound.status), feedState.latestRoundId, timestamp);
+    recordRound(feedState.latestRoundId, status, timestamp);
 
     forwardStatusToFlags(status);
   }
