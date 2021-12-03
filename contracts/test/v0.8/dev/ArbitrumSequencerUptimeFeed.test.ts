@@ -10,18 +10,24 @@ describe('ArbitrumSequencerUptimeFeed', () => {
   let arbitrumSequencerUptimeFeed: Contract
   let accessController: Contract
   let uptimeFeedConsumer: Contract
+  let mockArbitrumInbox: Contract
   let deployer: SignerWithAddress
   let l1Owner: SignerWithAddress
   let l2Messenger: SignerWithAddress
+  let someRando: SignerWithAddress
   before(async () => {
     const accounts = await ethers.getSigners()
     deployer = accounts[0]
     l1Owner = accounts[1]
     const dummy = accounts[2]
-    const l2MessengerAddress = ethers.utils.getAddress(
-      BigNumber.from(l1Owner.address)
-        .add('0x1111000000000000000000000000000000001111')
-        .toHexString(),
+    someRando = accounts[3]
+    // Arbitrum Inbox contract - only used for the L1->L2 address alias helper
+    const mockArbitrumInboxFactory = await ethers.getContractFactory(
+      'src/v0.8/tests/MockArbitrumInbox.sol:MockArbitrumInbox',
+    )
+    mockArbitrumInbox = await mockArbitrumInboxFactory.deploy()
+    const l2MessengerAddress = await mockArbitrumInbox.applyL1ToL2Alias(
+      l1Owner.address,
     )
     // Pretend we're on L2
     await network.provider.request({
@@ -121,6 +127,14 @@ describe('ArbitrumSequencerUptimeFeed', () => {
         timestamp,
       )
     })
+
+    it('should only accept updates from specified L1 sender', async () => {
+      await expect(
+        arbitrumSequencerUptimeFeed
+          .connect(someRando)
+          .updateStatus(true, now()),
+      ).to.be.revertedWith('Sender is not the L2 messenger')
+    })
   })
 
   describe('AggregatorV3Interface', () => {
@@ -218,7 +232,7 @@ describe('ArbitrumSequencerUptimeFeed', () => {
       const noUpdateTx = await _noUpdateTx.wait(1)
       // Assert no update
       expect(await arbitrumSequencerUptimeFeed.latestAnswer()).to.equal(0)
-      expect(noUpdateTx.cumulativeGasUsed).to.equal(26269)
+      expect(noUpdateTx.cumulativeGasUsed).to.equal(26241)
 
       // Gas for update
       const _updateTx = await arbitrumSequencerUptimeFeed
@@ -227,7 +241,7 @@ describe('ArbitrumSequencerUptimeFeed', () => {
       const updateTx = await _updateTx.wait(1)
       // Assert update
       expect(await arbitrumSequencerUptimeFeed.latestAnswer()).to.equal(1)
-      expect(updateTx.cumulativeGasUsed).to.equal(93029)
+      expect(updateTx.cumulativeGasUsed).to.equal(93001)
     })
 
     it('should consume a known amount of gas for getRoundData(uint80) @skip-coverage', async () => {
@@ -242,7 +256,7 @@ describe('ArbitrumSequencerUptimeFeed', () => {
           .populateTransaction.getRoundData(1),
       )
       const tx = await _tx.wait(1)
-      expect(tx.cumulativeGasUsed).to.equal(31086)
+      expect(tx.cumulativeGasUsed).to.equal(31108)
     })
 
     it('should consume a known amount of gas for latestRoundData() @skip-coverage', async () => {
@@ -272,7 +286,7 @@ describe('ArbitrumSequencerUptimeFeed', () => {
           .populateTransaction.latestAnswer(),
       )
       const tx = await _tx.wait(1)
-      expect(tx.cumulativeGasUsed).to.equal(28292)
+      expect(tx.cumulativeGasUsed).to.equal(28248)
     })
   })
 })
