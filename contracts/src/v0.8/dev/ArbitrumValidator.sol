@@ -112,7 +112,7 @@ contract ArbitrumValidator is TypeAndVersionInterface, AggregatorValidatorInterf
    *   - xDomain `msg.sender` backwards incompatible change (now an alias address)
    *   - new `withdrawFundsFromL2` fn that withdraws from L2 xDomain alias address
    *   - approximation of `maxSubmissionCost` using a L1 gas price feed
-   * - ArbitrumValidator 0.3.0: change target of L2 sequencer status update
+   * - ArbitrumValidator 1.0.0: change target of L2 sequencer status update
    *   - now calls `updateStatus` on an L2 ArbitrumSequencerUptimeFeed contract instead of
    *     directly calling the Flags contract
    *

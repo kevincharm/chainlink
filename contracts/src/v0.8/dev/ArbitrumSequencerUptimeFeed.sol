@@ -88,7 +88,7 @@ contract ArbitrumSequencerUptimeFeed is
   /**
    * @notice versions:
    *
-   * - Flags 1.0.0: initial release
+   * - ArbitrumSequencerUptimeFeed 1.0.0: initial release
    *
    * @inheritdoc TypeAndVersionInterface
    */
